@@ -360,7 +360,7 @@ async function ruchBota() {
   botMysli = true;
   rysuj();
   const start = Date.now();
-  const wynik = await zapytajSilnik({ typ: 'ruch', pozycja: stan, poziom: gra.poziom, opcje: { numerPolruchu: polruchGry } });
+  const wynik = await zapytajSilnik({ typ: 'ruch', pozycja: stan, poziom: gra.poziom, opcje: { numerPolruchu: polruchGry, historia: historia.slice(0, -1).map(h => h.stan) } });
   await czekaj(Math.max(0, 450 - (Date.now() - start)));   // żeby ruch nie pojawiał się „znikąd”
   if (moja !== generacja || !wynik) return;
   botMysli = false;

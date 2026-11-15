@@ -116,12 +116,14 @@ grupa('Partie bot kontra bot', () => {
     const losuj = generatorLosowy(2026);
     let st = stanPoczatkowy();
     const historia = { [kluczPozycji(st)]: 1 };
+    const pozycje = [];
     for (let n = 0; n < limit; n++) {
       if (!czyJestJakisRuch(st, st.naRuchu)) return czySzach(st, st.naRuchu) ? (st.naRuchu === 'w' ? '0-1' : '1-0') : 'remis';
       if (brakMaterialu(st)) return 'remis';
-      const r = silnik().najlepszyRuch(st, st.naRuchu === 'w' ? bialy : czarny, { losuj });
+      const r = silnik().najlepszyRuch(st, st.naRuchu === 'w' ? bialy : czarny, { losuj, historia: pozycje });
       if (!czyLegalny(st, r)) throw new Error(`nielegalny ruch bota: ${zapisRuchu(r)}`);
       const ruch = legalneRuchy(st, r.z.w, r.z.k).find(m => m.na.w === r.na.w && m.na.k === r.na.k);
+      pozycje.push(st);
       st = wykonaj(st, ruch, r.promocja || 'q');
       const k = kluczPozycji(st);
       historia[k] = (historia[k] || 0) + 1;
@@ -129,6 +131,30 @@ grupa('Partie bot kontra bot', () => {
     }
     return 'limit';
   }
+
+  test('Wygrywający bot nie wraca do pozycji, która już była', () => {
+    // Białe mają hetmana więcej. Sprawdzamy, jaki ruch bot wybiera normalnie, potem odtwarzamy
+    // historię: ten ruch był już zagrany, czarny król odszedł, hetman wrócił, król wrócił.
+    // Powtórzenie ruchu oznaczałoby ryzyko remisu, więc wygrywający bot musi zagrać coś innego.
+    const st = zFEN('8/8/3k4/8/8/2K5/8/7Q w - - 10');
+    const pierwszy = silnik().najlepszyRuch(st, { id: 99, czas: 300 });
+    const ruch = legalneRuchy(st, pierwszy.z.w, pierwszy.z.k).find(m => m.na.w === pierwszy.na.w && m.na.k === pierwszy.na.k);
+    const poRuchu = wykonaj(st, ruch);
+    const krol = znajdzKrola(poRuchu, 'b');
+    let historia = null;
+    for (const odejscie of legalneRuchy(poRuchu, krol.w, krol.k)) {
+      const a = wykonaj(poRuchu, odejscie);
+      const powrot = legalneRuchy(a, ruch.na.w, ruch.na.k).find(m => m.na.w === ruch.z.w && m.na.k === ruch.z.k);
+      if (!powrot) continue;
+      const b = wykonaj(a, powrot);
+      const krolWraca = legalneRuchy(b, odejscie.na.w, odejscie.na.k).find(m => m.na.w === krol.w && m.na.k === krol.k);
+      if (krolWraca && kluczPozycji(wykonaj(b, krolWraca)) === kluczPozycji(st)) { historia = [st, poRuchu, a, b]; break; }
+    }
+    oczekuj(!!historia).toBeTruthy();
+    const drugi = silnik().najlepszyRuch(st, { id: 99, czas: 300 }, { historia });
+    oczekuj(zapisRuchu(drugi) === zapisRuchu(pierwszy)).toBeFalsy();
+    oczekuj(drugi.ocena).toBeGreaterThan(500);
+  });
 
   test('Arcymistrz pokonuje początkującego (białymi)', () => {
     oczekuj(rozegraj(szybki(POZIOMY_BOTA[9], 100), POZIOMY_BOTA[0])).toBe('1-0');

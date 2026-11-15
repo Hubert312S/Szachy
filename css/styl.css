@@ -105,7 +105,7 @@ main { padding: 24px; }
 .start:hover { background: #a06a35; }
 
 .przeciwnik-info { margin: 0 0 4px; font-size: 0.95rem; opacity: 0.85; }
-.plansza.czeka .pole { cursor: wait; }
+.plansza.czeka .pole { cursor: default; }
 
 @media (max-width: 1000px) {
   .uklad { flex-direction: column-reverse; align-items: center; }

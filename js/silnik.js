@@ -6,8 +6,8 @@
 
 // Poziomy bota. Elo jest orientacyjne – to etykieta siły, nie oficjalny ranking.
 const POZIOMY_BOTA = [
-  { id: 1,  nazwa: 'Początkujący',          skrot: '',   elo: 400,  opis: 'Dopiero uczy się ruchów, często podstawia bierki.', glebokosc: 1, szum: 250, blad: 0.30, bezBic: true },
-  { id: 2,  nazwa: 'Nowicjusz',             skrot: '',   elo: 700,  opis: 'Zna zasady, ale gra bez planu.',                    glebokosc: 1, szum: 120, blad: 0.15, bezBic: true },
+  { id: 1,  nazwa: 'Początkujący',          skrot: '',   elo: 400,  opis: 'Bije, co wisi, ale nie widzi odpowiedzi rywala.', glebokosc: 1, szum: 120, blad: 0.10, bezBic: true },
+  { id: 2,  nazwa: 'Nowicjusz',             skrot: '',   elo: 700,  opis: 'Zna zasady, ale gra bez planu.',                    glebokosc: 1, szum: 70,  blad: 0.05, bezBic: true },
   { id: 3,  nazwa: 'Amator',                skrot: '',   elo: 1000, opis: 'Widzi proste bicia, popełnia błędy.',               glebokosc: 2, szum: 80,  blad: 0.07 },
   { id: 4,  nazwa: 'Klubowicz',             skrot: '',   elo: 1300, opis: 'Regularny gracz klubowy.',                          glebokosc: 2, szum: 40,  blad: 0.03 },
   { id: 5,  nazwa: 'Zaawansowany',          skrot: '',   elo: 1600, opis: 'Liczy proste kombinacje.',                          glebokosc: 3, szum: 20,  blad: 0.01 },
@@ -113,6 +113,7 @@ function stworzSilnik() {
   let strona = 1, roszady = 0, ep = 0, polruchy = 0, h1 = 0, h2 = 0;
   const krol = { 1: 0, '-1': 0 };
   const historia1 = [];         // skróty poprzednich pozycji (wykrywanie powtórzeń)
+  let historiaGry = [];         // skróty pozycji z dotychczasowej partii (przed bieżącą)
   // stos cofania ruchów
   const cofRuch = [], cofBita = [], cofRoszady = [], cofEp = [], cofPolruchy = [], cofH1 = [], cofH2 = [];
 
@@ -134,7 +135,14 @@ function stworzSilnik() {
     polruchy = poz.polruchyBezBicia || 0;
     przeliczSkrot();
     historia1.length = 0;
+    historia1.push(...historiaGry);
     cofRuch.length = 0;
+  }
+
+  // Zapamiętuje pozycje z partii, żeby bot wiedział, które ruchy prowadzą do powtórzenia.
+  function ustawHistorie(pozycje) {
+    historiaGry = [];
+    for (const p of pozycje || []) { ustawPozycje(p); historiaGry.push(h1); }
   }
 
   function przeliczSkrot() {
@@ -498,6 +506,8 @@ function stworzSilnik() {
 
   let ksiazka = null;   // skrót pozycji -> lista ruchów z książki
   function zbudujKsiazke() {
+    const zapamietana = historiaGry;
+    historiaGry = [];
     ksiazka = new Map();
     const start = { plansza: [
       'rnbqkbnr', 'pppppppp', '........', '........', '........', '........', 'PPPPPPPP', 'RNBQKBNR'
@@ -514,6 +524,7 @@ function stworzSilnik() {
         wykonajRuch(m);
       }
     }
+    historiaGry = zapamietana;
   }
 
   function ruchZKsiazki(poz, losuj) {
@@ -536,6 +547,7 @@ function stworzSilnik() {
 
   // Główna funkcja: zwraca ruch bota dla pozycji z gry i poziomu.
   function najlepszyRuch(poz, poziom, opcje = {}) {
+    ustawHistorie(opcje.historia);
     ustawPozycje(poz);
     wezly = 0;
     killery.length = 0;
@@ -593,6 +605,7 @@ function stworzSilnik() {
 
   // Ocena pozycji przez krótkie przeszukanie (do decyzji o przyjęciu remisu).
   function ocenPozycje(poz, czas = 300) {
+    ustawHistorie(null);
     ustawPozycje(poz);
     bezBic = false;
     koniecCzasu = Date.now() + czas;
@@ -605,6 +618,7 @@ function stworzSilnik() {
 
   // Liczba wszystkich pozycji po n półruchach – do testów generatora ruchów.
   function perft(poz, n) {
+    ustawHistorie(null);
     ustawPozycje(poz);
     const licz = g => {
       if (g === 0) return 1;
