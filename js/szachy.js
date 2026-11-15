@@ -28,6 +28,7 @@ let mozliweRuchy = [];  // legalne ruchy zaznaczonej bierki
 let ostatniRuch = [];
 let obrocona = false;
 let czekaNaPromocje = null;
+let historiaPozycji = {};  // ile razy wystąpiła dana pozycja (do remisu przez powtórzenie)
 
 const plansza = document.getElementById('plansza');
 const status = document.getElementById('status');
@@ -46,12 +47,15 @@ function nowaGra() {
     naRuchu: 'w',
     roszady: { w: { krotka: true, dluga: true }, b: { krotka: true, dluga: true } },
     enPassant: null,   // pole, na które można bić w przelocie
+    polruchyBezBicia: 0, // półruchy od ostatniego bicia lub ruchu pionkiem (zasada 50 ruchów)
     koniec: null
   };
   wybrane = null;
   mozliweRuchy = [];
   ostatniRuch = [];
   czekaNaPromocje = null;
+  historiaPozycji = { [kluczPozycji(stan)]: 1 };
+  document.querySelector('.propozycja-remisu')?.remove();
   rysuj();
 }
 
@@ -168,11 +172,13 @@ function wykonaj(st, ruch, promujNa = 'q') {
     naRuchu: przeciwnik(st.naRuchu),
     roszady: { w: { ...st.roszady.w }, b: { ...st.roszady.b } },
     enPassant: null,
+    polruchyBezBicia: st.polruchyBezBicia + 1,
     koniec: null
   };
   const P = nowy.plansza;
   const { z, na } = ruch;
   const b = P[z.w][z.k];
+  if (b.typ === 'p' || P[na.w][na.k]) nowy.polruchyBezBicia = 0;
 
   P[na.w][na.k] = b;
   P[z.w][z.k] = null;
@@ -199,6 +205,54 @@ function legalneRuchy(st, w, k) {
   const b = st.plansza[w][k];
   return ruchyBierki(st, w, k).filter(r => !czySzach(wykonaj(st, r), b.kolor));
 }
+
+// ---------- Remisy ----------
+
+// Pozycja do porównań przy powtórzeniach: bierki, strona na ruchu, prawa do roszady
+// i pole bicia w przelocie (tylko gdy takie bicie jest naprawdę możliwe).
+function kluczPozycji(st) {
+  const bierki = st.plansza.map(rzad => rzad.map(b =>
+    !b ? '.' : b.kolor === 'w' ? b.typ.toUpperCase() : b.typ).join('')).join('/');
+  const r = st.roszady;
+  const roszady = (r.w.krotka ? 'K' : '') + (r.w.dluga ? 'Q' : '') + (r.b.krotka ? 'k' : '') + (r.b.dluga ? 'q' : '');
+  let ep = '-';
+  if (st.enPassant) {
+    const krok = st.naRuchu === 'w' ? 1 : -1;  // pionki bijące stoją rząd „za” polem bicia
+    for (const dk of [-1, 1]) {
+      const w = st.enPassant.w + krok, k = st.enPassant.k + dk;
+      const b = naPlanszy(w, k) && st.plansza[w][k];
+      if (b && b.typ === 'p' && b.kolor === st.naRuchu &&
+          legalneRuchy(st, w, k).some(m => m.wPrzelocie)) ep = `${st.enPassant.w}${st.enPassant.k}`;
+    }
+  }
+  return `${bierki} ${st.naRuchu} ${roszady} ${ep}`;
+}
+
+// Za mało bierek, żeby ktokolwiek mógł dać mata:
+// król na króla, król i goniec lub skoczek na króla, gońce tylko na polach jednego koloru.
+function brakMaterialu(st) {
+  const inne = [];
+  const gonce = [];
+  for (let w = 0; w < 8; w++)
+    for (let k = 0; k < 8; k++) {
+      const b = st.plansza[w][k];
+      if (!b || b.typ === 'k') continue;
+      if (b.typ === 'b') gonce.push((w + k) % 2);
+      else inne.push(b.typ);
+    }
+  if (inne.length === 0 && gonce.length === 0) return true;                // K vs K
+  if (inne.length === 1 && inne[0] === 'n' && gonce.length === 0) return true; // K+S vs K
+  if (inne.length === 0 && gonce.every(c => c === gonce[0])) return true;  // same gońce jednego koloru pól
+  return false;
+}
+
+const OPISY_KONCA = {
+  pat: ['Pat', kto => `${kto} nie mają żadnego ruchu, ale nie są szachowane.`],
+  powtorzenie: ['Remis', () => 'Ta sama pozycja powtórzyła się trzy razy.'],
+  ruchy50: ['Remis', () => 'Zasada 50 ruchów: przez 50 ruchów nie było bicia ani ruchu pionkiem.'],
+  material: ['Remis', () => 'Za mało bierek, żeby dać mata.'],
+  zgoda: ['Remis', () => 'Gracze zgodzili się na remis.']
+};
 
 function czyJestJakisRuch(st, kolor) {
   for (let w = 0; w < 8; w++)
@@ -246,8 +300,8 @@ function pokazStatus() {
   const kto = stan.naRuchu === 'w' ? 'białych' : 'czarnych';
   if (stan.koniec === 'mat') {
     status.textContent = `Szach mat! Wygrywają ${stan.naRuchu === 'w' ? 'czarne' : 'białe'}.`;
-  } else if (stan.koniec === 'pat') {
-    status.textContent = 'Pat – remis.';
+  } else if (stan.koniec) {
+    status.textContent = stan.koniec === 'pat' ? 'Pat – remis.' : `Remis – ${OPISY_KONCA[stan.koniec][1]().toLowerCase()}`;
   } else if (czySzach(stan, stan.naRuchu)) {
     status.textContent = `Szach! Ruch ${kto}.`;
   } else if (wybrane) {
@@ -285,10 +339,20 @@ function zagraj(ruch, promujNa) {
   ostatniRuch = [ruch.z, ruch.na];
   wybrane = null;
   mozliweRuchy = [];
+  document.querySelector('.propozycja-remisu')?.remove();
+  const klucz = kluczPozycji(stan);
+  historiaPozycji[klucz] = (historiaPozycji[klucz] || 0) + 1;
+
   // Szach mat: król jest szachowany, a żadna bierka nie ma ruchu, który by go ratował
   // (ucieczka króla, zasłonięcie albo zbicie atakującej bierki). Bez szachu to pat.
   if (!czyJestJakisRuch(stan, stan.naRuchu)) {
     stan.koniec = czySzach(stan, stan.naRuchu) ? 'mat' : 'pat';
+  } else if (brakMaterialu(stan)) {
+    stan.koniec = 'material';
+  } else if (historiaPozycji[klucz] >= 3) {
+    stan.koniec = 'powtorzenie';
+  } else if (stan.polruchyBezBicia >= 100) {
+    stan.koniec = 'ruchy50';
   }
   rysuj();
   if (stan.koniec) pokazKoniecGry();
@@ -309,10 +373,12 @@ function pokazKoniecGry() {
         <button class="koniec-zamknij">Zobacz planszę</button>
       </div>`;
   } else {
+    const [tytul, opis] = OPISY_KONCA[stan.koniec];
     okno.innerHTML = `
       <div class="koniec-karta">
-        <h2>Pat</h2>
-        <p>Remis – ${stan.naRuchu === 'w' ? 'białe' : 'czarne'} nie mają żadnego ruchu, ale nie są szachowane.</p>
+        <div class="koniec-krol remis-krole">${rysujBierke('k', 'w')}${rysujBierke('k', 'b')}</div>
+        <h2>${tytul}</h2>
+        <p>${tytul === 'Pat' ? 'Remis – ' : ''}${opis(stan.naRuchu === 'w' ? 'Białe' : 'Czarne')}</p>
         <button class="koniec-nowa">Nowa gra</button>
         <button class="koniec-zamknij">Zobacz planszę</button>
       </div>`;
@@ -348,6 +414,29 @@ document.getElementById('nowa').addEventListener('click', () => {
   document.querySelector('.koniec-gry')?.remove();
   nowaGra();
 });
+// Remis za zgodą: gracz na ruchu proponuje, przeciwnik przyjmuje albo odrzuca.
+document.getElementById('remis').addEventListener('click', () => {
+  if (stan.koniec || czekaNaPromocje || document.querySelector('.propozycja-remisu')) return;
+  const proponuje = stan.naRuchu === 'w' ? 'Białe' : 'Czarne';
+  const odpowiada = stan.naRuchu === 'w' ? 'Czarne' : 'Białe';
+  const okno = document.createElement('div');
+  okno.className = 'propozycja-remisu';
+  okno.innerHTML = `
+    <span>${proponuje} proponują remis. ${odpowiada}, przyjmujecie?</span>
+    <button class="przyjmij">Przyjmij</button>
+    <button class="odrzuc">Odrzuć</button>`;
+  okno.querySelector('.przyjmij').addEventListener('click', () => {
+    okno.remove();
+    stan.koniec = 'zgoda';
+    wybrane = null;
+    mozliweRuchy = [];
+    rysuj();
+    pokazKoniecGry();
+  });
+  okno.querySelector('.odrzuc').addEventListener('click', () => okno.remove());
+  document.querySelector('.przyciski').after(okno);
+});
+
 document.getElementById('obroc').addEventListener('click', () => { obrocona = !obrocona; rysuj(); });
 
 nowaGra();
