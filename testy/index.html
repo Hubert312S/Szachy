@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Szachy – testy</title>
+  <link rel="stylesheet" href="../css/styl.css">
+  <style>
+    body { display: block; padding: 24px 32px; }
+    .naglowek { display: flex; align-items: baseline; gap: 18px; }
+    .naglowek h1 { margin: 0; }
+    #podsumowanie { font-size: 1.15rem; }
+    #podsumowanie.ok { color: #8fd18f; }
+    #podsumowanie.blad { color: #ff8a80; }
+    .grupa-testow { margin-top: 18px; }
+    .grupa-testow h2 { font-size: 1.05rem; margin: 0 0 6px; opacity: 0.85; }
+    .wynik { font-family: Consolas, monospace; font-size: 0.9rem; padding: 2px 0; }
+    .wynik .czas { opacity: 0.45; }
+    .wynik.ok::before { content: '✓ '; color: #8fd18f; }
+    .wynik.blad { color: #ff8a80; }
+    .wynik.blad::before { content: '✗ '; }
+    .wynik .powod { display: block; margin-left: 18px; opacity: 0.85; }
+    details { margin-top: 28px; }
+    summary { cursor: pointer; opacity: 0.7; }
+    #gra-testowa { transform: scale(0.6); transform-origin: top left; height: 620px; }
+  </style>
+</head>
+<body>
+  <div class="naglowek">
+    <h1>Testy</h1>
+    <span id="podsumowanie">Trwa testowanie…</span>
+    <button onclick="location.reload()">Uruchom ponownie</button>
+  </div>
+  <div id="wyniki"></div>
+
+  <details>
+    <summary>Podgląd strony gry używanej w testach</summary>
+    <!-- kopia strony gry (index.html), na której klikają testy interfejsu -->
+    <div id="gra-testowa">
+      <main class="uklad">
+        <aside class="panel">
+          <h2>Przeciwnik</h2>
+          <div class="przelacznik" id="tryb">
+            <button data-tryb="dwoch">Dwóch graczy</button>
+            <button data-tryb="bot">Bot</button>
+          </div>
+          <div id="opcje-bota">
+            <h3>Grasz</h3>
+            <div class="przelacznik" id="kolor">
+              <button data-kolor="w">Białymi</button>
+              <button data-kolor="b">Czarnymi</button>
+              <button data-kolor="losowo">Losowo</button>
+            </div>
+            <h3>Poziom bota</h3>
+            <div id="poziomy" class="poziomy"></div>
+          </div>
+          <button id="start" class="start">Zagraj z botem</button>
+        </aside>
+        <section class="gra">
+          <p id="przeciwnik-info" class="przeciwnik-info"></p>
+          <p id="status"></p>
+          <div class="plansza-ramka"><div id="plansza" class="plansza"></div></div>
+          <div id="przeglad" class="przeglad ukryte">
+            <span class="przeglad-tytul">Przegląd partii</span>
+            <div class="przeglad-przyciski">
+              <button id="przeglad-poczatek" title="Na początek (Home)">⏮</button>
+              <button id="przeglad-wstecz" title="Ruch wstecz (←)">◀</button>
+              <button id="przeglad-naprzod" title="Ruch naprzód (→)">▶</button>
+              <button id="przeglad-koniec" title="Na koniec (End)">⏭</button>
+            </div>
+            <span id="przeglad-info" class="przeglad-info"></span>
+          </div>
+          <div class="przyciski">
+            <button id="obroc">Obróć planszę</button>
+            <button id="remis">Zaproponuj remis</button>
+            <button id="nowa">Ustaw od nowa</button>
+          </div>
+        </section>
+      </main>
+    </div>
+  </details>
+
+  <script src="../js/bierki.js"></script>
+  <script src="../js/zasady.js"></script>
+  <script src="../js/silnik.js"></script>
+  <script src="framework.js"></script>
+  <script src="zasady.test.js"></script>
+  <script src="remisy.test.js"></script>
+  <script src="silnik.test.js"></script>
+  <script src="interfejs.test.js"></script>
+  <script>
+    // Najpierw daj stronie się narysować, potem testuj.
+    setTimeout(async () => {
+      const wyniki = document.getElementById('wyniki');
+      let grupaEl = null, nazwaGrupy = null;
+      const w = await uruchomTesty(t => {
+        if (t.grupa !== nazwaGrupy) {
+          nazwaGrupy = t.grupa;
+          grupaEl = document.createElement('div');
+          grupaEl.className = 'grupa-testow';
+          grupaEl.innerHTML = `<h2>${t.grupa}</h2>`;
+          wyniki.appendChild(grupaEl);
+        }
+        const el = document.createElement('div');
+        el.className = 'wynik ' + t.stan;
+        el.innerHTML = `${t.nazwa} <span class="czas">(${t.czas} ms)</span>` +
+          (t.blad ? `<span class="powod">${t.blad}</span>` : '');
+        grupaEl.appendChild(el);
+      }, 'przegladarka');
+      const p = document.getElementById('podsumowanie');
+      p.textContent = w.bledy ? `Nieudane: ${w.bledy}, zaliczone: ${w.ok}` : `Wszystkie testy zaliczone (${w.ok})`;
+      p.className = w.bledy ? 'blad' : 'ok';
+      document.title = (w.bledy ? '✗ ' : '✓ ') + 'Szachy – testy';
+    }, 100);
+  </script>
+</body>
+</html>
