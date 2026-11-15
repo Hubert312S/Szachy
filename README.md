@@ -13,7 +13,7 @@ Otwórz `index.html` w przeglądarce. Nie trzeba niczego instalować.
 - Pełne zasady ruchów: pionek (ruch o 1 i 2 pola, bicie, bicie w przelocie, promocja z wyborem bierki), wieża, skoczek, goniec, hetman, król (z roszadą)
 - Po kliknięciu bierki widać wszystkie jej możliwe ruchy
 - Nie da się wykonać ruchu, po którym własny król byłby w szachu
-- Wykrywanie szachu, mata i pata
+- Wykrywanie szachu, mata i pata – po macie okienko ogłasza, czy wygrały białe, czy czarne
 - Podświetlenie ostatniego ruchu
 - Obracanie planszy i ustawianie od nowa
 
