@@ -1,0 +1,282 @@
+// Zasady szachów: plansza, ruchy bierek, szach, mat, remisy.
+// Ten plik nie dotyka strony (DOM), dzięki czemu da się go testować (testy/).
+// Plansza: st.plansza[w][k], w = 0 to 8. rząd (czarne), w = 7 to 1. rząd (białe).
+
+const USTAWIENIE_POCZATKOWE = [
+  'rnbqkbnr',
+  'pppppppp',
+  '........',
+  '........',
+  '........',
+  '........',
+  'PPPPPPPP',
+  'RNBQKBNR'
+];
+const LITERY = 'abcdefgh';
+const NAZWY = { p: 'Pionek', r: 'Wieża', n: 'Skoczek', b: 'Goniec', q: 'Hetman', k: 'Król' };
+
+const KIERUNKI = {
+  r: [[1, 0], [-1, 0], [0, 1], [0, -1]],                          // wieża: proste
+  b: [[1, 1], [1, -1], [-1, 1], [-1, -1]],                        // goniec: skosy
+  q: [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]], // hetman: oba
+  n: [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]], // skoczek: „L”
+  k: [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]  // król: o 1 pole
+};
+
+const naPlanszy = (w, k) => w >= 0 && w < 8 && k >= 0 && k < 8;
+const przeciwnik = kolor => kolor === 'w' ? 'b' : 'w';
+
+function stanPoczatkowy() {
+  return {
+    plansza: USTAWIENIE_POCZATKOWE.map(rzad =>
+      [...rzad].map(z => z === '.' ? null : {
+        typ: z.toLowerCase(),
+        kolor: z === z.toUpperCase() ? 'w' : 'b'
+      })
+    ),
+    naRuchu: 'w',
+    roszady: { w: { krotka: true, dluga: true }, b: { krotka: true, dluga: true } },
+    enPassant: null,     // pole, na które można bić w przelocie
+    polruchyBezBicia: 0, // półruchy od ostatniego bicia lub ruchu pionkiem (zasada 50 ruchów)
+    koniec: null
+  };
+}
+
+// Stan z zapisu FEN (standardowy zapis pozycji szachowej) – przydaje się w testach.
+function zFEN(fen) {
+  const [uklad, strona, roszady = '-', ep = '-', polruchy = '0'] = fen.trim().split(/\s+/);
+  const plansza = uklad.split('/').map(rzad => {
+    const wiersz = [];
+    for (const z of rzad) {
+      if (/\d/.test(z)) for (let i = 0; i < +z; i++) wiersz.push(null);
+      else wiersz.push({ typ: z.toLowerCase(), kolor: z === z.toUpperCase() ? 'w' : 'b' });
+    }
+    return wiersz;
+  });
+  return {
+    plansza,
+    naRuchu: strona,
+    roszady: {
+      w: { krotka: roszady.includes('K'), dluga: roszady.includes('Q') },
+      b: { krotka: roszady.includes('k'), dluga: roszady.includes('q') }
+    },
+    enPassant: ep === '-' ? null : { w: 8 - +ep[1], k: LITERY.indexOf(ep[0]) },
+    polruchyBezBicia: +polruchy,
+    koniec: null
+  };
+}
+
+// Wszystkie legalne ruchy strony na ruchu.
+function wszystkieRuchy(st) {
+  const ruchy = [];
+  for (let w = 0; w < 8; w++)
+    for (let k = 0; k < 8; k++) {
+      const b = st.plansza[w][k];
+      if (b && b.kolor === st.naRuchu) ruchy.push(...legalneRuchy(st, w, k));
+    }
+  return ruchy;
+}
+
+// ---------- Generowanie ruchów ----------
+
+// Wszystkie ruchy bierki zgodne z jej sposobem poruszania się (bez sprawdzania, czy król zostaje w szachu).
+function ruchyBierki(st, w, k) {
+  const b = st.plansza[w][k];
+  if (!b) return [];
+  const ruchy = [];
+
+  if (b.typ === 'p') {
+    const krok = b.kolor === 'w' ? -1 : 1;
+    const startowy = b.kolor === 'w' ? 6 : 1;
+    const ostatni = b.kolor === 'w' ? 0 : 7;
+    const dodaj = (dw, dk, extra = {}) =>
+      ruchy.push({ z: { w, k }, na: { w: dw, k: dk }, promocja: dw === ostatni, ...extra });
+
+    // o jedno pole do przodu
+    if (naPlanszy(w + krok, k) && !st.plansza[w + krok][k]) {
+      dodaj(w + krok, k);
+      // o dwa pola z pozycji startowej
+      if (w === startowy && !st.plansza[w + 2 * krok][k]) dodaj(w + 2 * krok, k, { podwojny: true });
+    }
+    // bicie po skosie (także w przelocie)
+    for (const dk of [-1, 1]) {
+      const nw = w + krok, nk = k + dk;
+      if (!naPlanszy(nw, nk)) continue;
+      const cel = st.plansza[nw][nk];
+      if (cel && cel.kolor !== b.kolor) dodaj(nw, nk);
+      else if (st.enPassant && st.enPassant.w === nw && st.enPassant.k === nk) dodaj(nw, nk, { wPrzelocie: true });
+    }
+    return ruchy;
+  }
+
+  const dalekosiezna = b.typ === 'r' || b.typ === 'b' || b.typ === 'q';
+  for (const [dw, dk] of KIERUNKI[b.typ]) {
+    let nw = w + dw, nk = k + dk;
+    while (naPlanszy(nw, nk)) {
+      const cel = st.plansza[nw][nk];
+      if (cel && cel.kolor === b.kolor) break;
+      ruchy.push({ z: { w, k }, na: { w: nw, k: nk } });
+      if (cel || !dalekosiezna) break;
+      nw += dw; nk += dk;
+    }
+  }
+
+  // roszada
+  if (b.typ === 'k') {
+    const r = st.roszady[b.kolor];
+    const rzad = b.kolor === 'w' ? 7 : 0;
+    const wrog = przeciwnik(b.kolor);
+    if (w === rzad && k === 4 && !czyAtakowane(st, rzad, 4, wrog)) {
+      const p = st.plansza[rzad];
+      if (r.krotka && !p[5] && !p[6] && p[7]?.typ === 'r' && p[7].kolor === b.kolor &&
+          !czyAtakowane(st, rzad, 5, wrog) && !czyAtakowane(st, rzad, 6, wrog)) {
+        ruchy.push({ z: { w, k }, na: { w: rzad, k: 6 }, roszada: 'krotka' });
+      }
+      if (r.dluga && !p[3] && !p[2] && !p[1] && p[0]?.typ === 'r' && p[0].kolor === b.kolor &&
+          !czyAtakowane(st, rzad, 3, wrog) && !czyAtakowane(st, rzad, 2, wrog)) {
+        ruchy.push({ z: { w, k }, na: { w: rzad, k: 2 }, roszada: 'dluga' });
+      }
+    }
+  }
+  return ruchy;
+}
+
+// Czy pole (w, k) jest atakowane przez bierki koloru `kolor`.
+function czyAtakowane(st, w, k, kolor) {
+  const P = st.plansza;
+  const jest = (r, c, typy) => naPlanszy(r, c) && P[r][c] && P[r][c].kolor === kolor && typy.includes(P[r][c].typ);
+
+  // pionki (atakują po skosie do przodu)
+  const odPionka = kolor === 'w' ? 1 : -1;
+  if (jest(w + odPionka, k - 1, 'p') || jest(w + odPionka, k + 1, 'p')) return true;
+  // skoczek i król
+  if (KIERUNKI.n.some(([dw, dk]) => jest(w + dw, k + dk, 'n'))) return true;
+  if (KIERUNKI.k.some(([dw, dk]) => jest(w + dw, k + dk, 'k'))) return true;
+  // wieża/hetman po prostych, goniec/hetman po skosach
+  const promienie = [[KIERUNKI.r, 'rq'], [KIERUNKI.b, 'bq']];
+  for (const [kierunki, typy] of promienie) {
+    for (const [dw, dk] of kierunki) {
+      let r = w + dw, c = k + dk;
+      while (naPlanszy(r, c)) {
+        if (P[r][c]) {
+          if (jest(r, c, typy)) return true;
+          break;
+        }
+        r += dw; c += dk;
+      }
+    }
+  }
+  return false;
+}
+
+function znajdzKrola(st, kolor) {
+  for (let w = 0; w < 8; w++)
+    for (let k = 0; k < 8; k++) {
+      const b = st.plansza[w][k];
+      if (b && b.typ === 'k' && b.kolor === kolor) return { w, k };
+    }
+  return null;
+}
+
+function czySzach(st, kolor) {
+  const krol = znajdzKrola(st, kolor);
+  return krol && czyAtakowane(st, krol.w, krol.k, przeciwnik(kolor));
+}
+
+// Wykonuje ruch na kopii stanu i zwraca nowy stan.
+function wykonaj(st, ruch, promujNa = 'q') {
+  const nowy = {
+    plansza: st.plansza.map(rzad => rzad.map(b => b && { ...b })),
+    naRuchu: przeciwnik(st.naRuchu),
+    roszady: { w: { ...st.roszady.w }, b: { ...st.roszady.b } },
+    enPassant: null,
+    polruchyBezBicia: st.polruchyBezBicia + 1,
+    koniec: null
+  };
+  const P = nowy.plansza;
+  const { z, na } = ruch;
+  const b = P[z.w][z.k];
+  if (b.typ === 'p' || P[na.w][na.k]) nowy.polruchyBezBicia = 0;
+
+  P[na.w][na.k] = b;
+  P[z.w][z.k] = null;
+
+  if (ruch.wPrzelocie) P[z.w][na.k] = null;          // zbity pionek stoi obok
+  if (ruch.podwojny) nowy.enPassant = { w: (z.w + na.w) / 2, k: z.k };
+  if (ruch.promocja) P[na.w][na.k] = { typ: promujNa, kolor: b.kolor };
+  if (ruch.roszada === 'krotka') { P[z.w][5] = P[z.w][7]; P[z.w][7] = null; }
+  if (ruch.roszada === 'dluga') { P[z.w][3] = P[z.w][0]; P[z.w][0] = null; }
+
+  // utrata prawa do roszady
+  if (b.typ === 'k') nowy.roszady[b.kolor] = { krotka: false, dluga: false };
+  for (const pole of [z, na]) {
+    if (pole.w === 7 && pole.k === 0) nowy.roszady.w.dluga = false;
+    if (pole.w === 7 && pole.k === 7) nowy.roszady.w.krotka = false;
+    if (pole.w === 0 && pole.k === 0) nowy.roszady.b.dluga = false;
+    if (pole.w === 0 && pole.k === 7) nowy.roszady.b.krotka = false;
+  }
+  return nowy;
+}
+
+// Ruchy, po których własny król nie zostaje w szachu.
+function legalneRuchy(st, w, k) {
+  const b = st.plansza[w][k];
+  return ruchyBierki(st, w, k).filter(r => !czySzach(wykonaj(st, r), b.kolor));
+}
+
+// ---------- Remisy ----------
+
+// Pozycja do porównań przy powtórzeniach: bierki, strona na ruchu, prawa do roszady
+// i pole bicia w przelocie (tylko gdy takie bicie jest naprawdę możliwe).
+function kluczPozycji(st) {
+  const bierki = st.plansza.map(rzad => rzad.map(b =>
+    !b ? '.' : b.kolor === 'w' ? b.typ.toUpperCase() : b.typ).join('')).join('/');
+  const r = st.roszady;
+  const roszady = (r.w.krotka ? 'K' : '') + (r.w.dluga ? 'Q' : '') + (r.b.krotka ? 'k' : '') + (r.b.dluga ? 'q' : '');
+  let ep = '-';
+  if (st.enPassant) {
+    const krok = st.naRuchu === 'w' ? 1 : -1;  // pionki bijące stoją rząd „za” polem bicia
+    for (const dk of [-1, 1]) {
+      const w = st.enPassant.w + krok, k = st.enPassant.k + dk;
+      const b = naPlanszy(w, k) && st.plansza[w][k];
+      if (b && b.typ === 'p' && b.kolor === st.naRuchu &&
+          legalneRuchy(st, w, k).some(m => m.wPrzelocie)) ep = `${st.enPassant.w}${st.enPassant.k}`;
+    }
+  }
+  return `${bierki} ${st.naRuchu} ${roszady} ${ep}`;
+}
+
+// Za mało bierek, żeby ktokolwiek mógł dać mata:
+// król na króla, król i goniec lub skoczek na króla, gońce tylko na polach jednego koloru.
+function brakMaterialu(st) {
+  const inne = [];
+  const gonce = [];
+  for (let w = 0; w < 8; w++)
+    for (let k = 0; k < 8; k++) {
+      const b = st.plansza[w][k];
+      if (!b || b.typ === 'k') continue;
+      if (b.typ === 'b') gonce.push((w + k) % 2);
+      else inne.push(b.typ);
+    }
+  if (inne.length === 0 && gonce.length === 0) return true;                // K vs K
+  if (inne.length === 1 && inne[0] === 'n' && gonce.length === 0) return true; // K+S vs K
+  if (inne.length === 0 && gonce.every(c => c === gonce[0])) return true;  // same gońce jednego koloru pól
+  return false;
+}
+
+const OPISY_KONCA = {
+  pat: ['Pat', kto => `${kto} nie mają żadnego ruchu, ale nie są szachowane.`],
+  powtorzenie: ['Remis', () => 'Ta sama pozycja powtórzyła się trzy razy.'],
+  ruchy50: ['Remis', () => 'Zasada 50 ruchów: przez 50 ruchów nie było bicia ani ruchu pionkiem.'],
+  material: ['Remis', () => 'Za mało bierek, żeby dać mata.'],
+  zgoda: ['Remis', () => 'Gracze zgodzili się na remis.']
+};
+
+function czyJestJakisRuch(st, kolor) {
+  for (let w = 0; w < 8; w++)
+    for (let k = 0; k < 8; k++) {
+      const b = st.plansza[w][k];
+      if (b && b.kolor === kolor && legalneRuchy(st, w, k).length) return true;
+    }
+  return false;
+}
