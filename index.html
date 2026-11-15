@@ -7,23 +7,55 @@
   <link rel="stylesheet" href="css/styl.css">
 </head>
 <body>
-  <main>
-    <h1>Szachy</h1>
-    <p id="status">Ruch białych</p>
+  <main class="uklad">
+    <aside class="panel">
+      <h2>Przeciwnik</h2>
+      <div class="przelacznik" id="tryb">
+        <button data-tryb="dwoch">Dwóch graczy</button>
+        <button data-tryb="bot">Bot</button>
+      </div>
 
-    <div class="plansza-ramka">
-      <div id="plansza" class="plansza"></div>
-    </div>
+      <div id="opcje-bota">
+        <h3>Grasz</h3>
+        <div class="przelacznik" id="kolor">
+          <button data-kolor="w">Białymi</button>
+          <button data-kolor="b">Czarnymi</button>
+          <button data-kolor="losowo">Losowo</button>
+        </div>
 
-    <div class="przyciski">
-      <button id="obroc">Obróć planszę</button>
-      <button id="remis">Zaproponuj remis</button>
-      <button id="nowa">Ustaw od nowa</button>
-    </div>
-    <p class="podpowiedz">Kliknij bierkę, aby zobaczyć jej możliwe ruchy, potem kliknij pole docelowe.</p>
+        <h3>Poziom bota</h3>
+        <div id="poziomy" class="poziomy"></div>
+        <p class="przypis">
+          Tytuły FIDE: kandydat na mistrza (CM) od 2200, mistrz FIDE (FM) od 2300,
+          mistrz międzynarodowy (IM) od 2400, arcymistrz (GM) od 2500 Elo.
+          Elo bota jest orientacyjne.
+        </p>
+      </div>
+
+      <button id="start" class="start">Zagraj z botem</button>
+    </aside>
+
+    <section class="gra">
+      <h1>Szachy</h1>
+      <p id="przeciwnik-info" class="przeciwnik-info"></p>
+      <p id="status">Ruch białych</p>
+
+      <div class="plansza-ramka">
+        <div id="plansza" class="plansza"></div>
+      </div>
+
+      <div class="przyciski">
+        <button id="obroc">Obróć planszę</button>
+        <button id="remis">Zaproponuj remis</button>
+        <button id="nowa">Ustaw od nowa</button>
+      </div>
+      <p class="podpowiedz">Kliknij bierkę, aby zobaczyć jej możliwe ruchy, potem kliknij pole docelowe.</p>
+    </section>
   </main>
 
   <script src="js/bierki.js"></script>
+  <script src="js/zasady.js"></script>
+  <script src="js/silnik.js"></script>
   <script src="js/szachy.js"></script>
 </body>
 </html>
