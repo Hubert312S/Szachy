@@ -1,26 +1,5 @@
-// Szachy: plansza, ruchy wszystkich bierek i zasady gry.
-// Plansza: stan.plansza[w][k], w = 0 to 8. rząd (czarne), w = 7 to 1. rząd (białe).
-
-const USTAWIENIE_POCZATKOWE = [
-  'rnbqkbnr',
-  'pppppppp',
-  '........',
-  '........',
-  '........',
-  '........',
-  'PPPPPPPP',
-  'RNBQKBNR'
-];
-const LITERY = 'abcdefgh';
-const NAZWY = { p: 'Pionek', r: 'Wieża', n: 'Skoczek', b: 'Goniec', q: 'Hetman', k: 'Król' };
-
-const KIERUNKI = {
-  r: [[1, 0], [-1, 0], [0, 1], [0, -1]],                          // wieża: proste
-  b: [[1, 1], [1, -1], [-1, 1], [-1, -1]],                        // goniec: skosy
-  q: [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]], // hetman: oba
-  n: [[2, 1], [2, -1], [-2, 1], [-2, -1], [1, 2], [1, -2], [-1, 2], [-1, -2]], // skoczek: „L”
-  k: [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]  // król: o 1 pole
-};
+// Strona gry: rysowanie planszy, kliknięcia, okienka, gra z botem.
+// Zasady są w zasady.js, silnik bota w silnik.js.
 
 let stan;
 let wybrane = null;     // { w, k }
@@ -30,237 +9,35 @@ let obrocona = false;
 let czekaNaPromocje = null;
 let historiaPozycji = {};  // ile razy wystąpiła dana pozycja (do remisu przez powtórzenie)
 
+// Ustawienia wybrane w panelu oraz ustawienia trwającej partii.
+const ustawienia = { tryb: 'bot', kolor: 'w', poziomId: 6 };
+let gra = { tryb: 'dwoch', kolorGracza: 'w', poziom: null };
+let botMysli = false;
+let generacja = 0;      // zmienia się przy nowej grze – stare odpowiedzi bota są ignorowane
+let polruchGry = 0;
+
 const plansza = document.getElementById('plansza');
 const status = document.getElementById('status');
-
-const naPlanszy = (w, k) => w >= 0 && w < 8 && k >= 0 && k < 8;
-const przeciwnik = kolor => kolor === 'w' ? 'b' : 'w';
+const infoPrzeciwnik = document.getElementById('przeciwnik-info');
 
 function nowaGra() {
-  stan = {
-    plansza: USTAWIENIE_POCZATKOWE.map(rzad =>
-      [...rzad].map(z => z === '.' ? null : {
-        typ: z.toLowerCase(),
-        kolor: z === z.toUpperCase() ? 'w' : 'b'
-      })
-    ),
-    naRuchu: 'w',
-    roszady: { w: { krotka: true, dluga: true }, b: { krotka: true, dluga: true } },
-    enPassant: null,   // pole, na które można bić w przelocie
-    polruchyBezBicia: 0, // półruchy od ostatniego bicia lub ruchu pionkiem (zasada 50 ruchów)
-    koniec: null
-  };
+  generacja++;
+  if (botMysli) restartujSilnik();
+  botMysli = false;
+  polruchGry = 0;
+  document.querySelector('.promocja')?.remove();
+  document.querySelector('.koniec-gry')?.remove();
+  if (gra.tryb === 'bot') obrocona = gra.kolorGracza === 'b';
+  stan = stanPoczatkowy();
   wybrane = null;
   mozliweRuchy = [];
   ostatniRuch = [];
   czekaNaPromocje = null;
   historiaPozycji = { [kluczPozycji(stan)]: 1 };
   document.querySelector('.propozycja-remisu')?.remove();
+  pokazPrzeciwnika();
   rysuj();
-}
-
-// ---------- Generowanie ruchów ----------
-
-// Wszystkie ruchy bierki zgodne z jej sposobem poruszania się (bez sprawdzania, czy król zostaje w szachu).
-function ruchyBierki(st, w, k) {
-  const b = st.plansza[w][k];
-  if (!b) return [];
-  const ruchy = [];
-
-  if (b.typ === 'p') {
-    const krok = b.kolor === 'w' ? -1 : 1;
-    const startowy = b.kolor === 'w' ? 6 : 1;
-    const ostatni = b.kolor === 'w' ? 0 : 7;
-    const dodaj = (dw, dk, extra = {}) =>
-      ruchy.push({ z: { w, k }, na: { w: dw, k: dk }, promocja: dw === ostatni, ...extra });
-
-    // o jedno pole do przodu
-    if (naPlanszy(w + krok, k) && !st.plansza[w + krok][k]) {
-      dodaj(w + krok, k);
-      // o dwa pola z pozycji startowej
-      if (w === startowy && !st.plansza[w + 2 * krok][k]) dodaj(w + 2 * krok, k, { podwojny: true });
-    }
-    // bicie po skosie (także w przelocie)
-    for (const dk of [-1, 1]) {
-      const nw = w + krok, nk = k + dk;
-      if (!naPlanszy(nw, nk)) continue;
-      const cel = st.plansza[nw][nk];
-      if (cel && cel.kolor !== b.kolor) dodaj(nw, nk);
-      else if (st.enPassant && st.enPassant.w === nw && st.enPassant.k === nk) dodaj(nw, nk, { wPrzelocie: true });
-    }
-    return ruchy;
-  }
-
-  const dalekosiezna = b.typ === 'r' || b.typ === 'b' || b.typ === 'q';
-  for (const [dw, dk] of KIERUNKI[b.typ]) {
-    let nw = w + dw, nk = k + dk;
-    while (naPlanszy(nw, nk)) {
-      const cel = st.plansza[nw][nk];
-      if (cel && cel.kolor === b.kolor) break;
-      ruchy.push({ z: { w, k }, na: { w: nw, k: nk } });
-      if (cel || !dalekosiezna) break;
-      nw += dw; nk += dk;
-    }
-  }
-
-  // roszada
-  if (b.typ === 'k') {
-    const r = st.roszady[b.kolor];
-    const rzad = b.kolor === 'w' ? 7 : 0;
-    const wrog = przeciwnik(b.kolor);
-    if (w === rzad && k === 4 && !czyAtakowane(st, rzad, 4, wrog)) {
-      const p = st.plansza[rzad];
-      if (r.krotka && !p[5] && !p[6] && p[7]?.typ === 'r' && p[7].kolor === b.kolor &&
-          !czyAtakowane(st, rzad, 5, wrog) && !czyAtakowane(st, rzad, 6, wrog)) {
-        ruchy.push({ z: { w, k }, na: { w: rzad, k: 6 }, roszada: 'krotka' });
-      }
-      if (r.dluga && !p[3] && !p[2] && !p[1] && p[0]?.typ === 'r' && p[0].kolor === b.kolor &&
-          !czyAtakowane(st, rzad, 3, wrog) && !czyAtakowane(st, rzad, 2, wrog)) {
-        ruchy.push({ z: { w, k }, na: { w: rzad, k: 2 }, roszada: 'dluga' });
-      }
-    }
-  }
-  return ruchy;
-}
-
-// Czy pole (w, k) jest atakowane przez bierki koloru `kolor`.
-function czyAtakowane(st, w, k, kolor) {
-  const P = st.plansza;
-  const jest = (r, c, typy) => naPlanszy(r, c) && P[r][c] && P[r][c].kolor === kolor && typy.includes(P[r][c].typ);
-
-  // pionki (atakują po skosie do przodu)
-  const odPionka = kolor === 'w' ? 1 : -1;
-  if (jest(w + odPionka, k - 1, 'p') || jest(w + odPionka, k + 1, 'p')) return true;
-  // skoczek i król
-  if (KIERUNKI.n.some(([dw, dk]) => jest(w + dw, k + dk, 'n'))) return true;
-  if (KIERUNKI.k.some(([dw, dk]) => jest(w + dw, k + dk, 'k'))) return true;
-  // wieża/hetman po prostych, goniec/hetman po skosach
-  const promienie = [[KIERUNKI.r, 'rq'], [KIERUNKI.b, 'bq']];
-  for (const [kierunki, typy] of promienie) {
-    for (const [dw, dk] of kierunki) {
-      let r = w + dw, c = k + dk;
-      while (naPlanszy(r, c)) {
-        if (P[r][c]) {
-          if (jest(r, c, typy)) return true;
-          break;
-        }
-        r += dw; c += dk;
-      }
-    }
-  }
-  return false;
-}
-
-function znajdzKrola(st, kolor) {
-  for (let w = 0; w < 8; w++)
-    for (let k = 0; k < 8; k++) {
-      const b = st.plansza[w][k];
-      if (b && b.typ === 'k' && b.kolor === kolor) return { w, k };
-    }
-  return null;
-}
-
-function czySzach(st, kolor) {
-  const krol = znajdzKrola(st, kolor);
-  return krol && czyAtakowane(st, krol.w, krol.k, przeciwnik(kolor));
-}
-
-// Wykonuje ruch na kopii stanu i zwraca nowy stan.
-function wykonaj(st, ruch, promujNa = 'q') {
-  const nowy = {
-    plansza: st.plansza.map(rzad => rzad.map(b => b && { ...b })),
-    naRuchu: przeciwnik(st.naRuchu),
-    roszady: { w: { ...st.roszady.w }, b: { ...st.roszady.b } },
-    enPassant: null,
-    polruchyBezBicia: st.polruchyBezBicia + 1,
-    koniec: null
-  };
-  const P = nowy.plansza;
-  const { z, na } = ruch;
-  const b = P[z.w][z.k];
-  if (b.typ === 'p' || P[na.w][na.k]) nowy.polruchyBezBicia = 0;
-
-  P[na.w][na.k] = b;
-  P[z.w][z.k] = null;
-
-  if (ruch.wPrzelocie) P[z.w][na.k] = null;          // zbity pionek stoi obok
-  if (ruch.podwojny) nowy.enPassant = { w: (z.w + na.w) / 2, k: z.k };
-  if (ruch.promocja) P[na.w][na.k] = { typ: promujNa, kolor: b.kolor };
-  if (ruch.roszada === 'krotka') { P[z.w][5] = P[z.w][7]; P[z.w][7] = null; }
-  if (ruch.roszada === 'dluga') { P[z.w][3] = P[z.w][0]; P[z.w][0] = null; }
-
-  // utrata prawa do roszady
-  if (b.typ === 'k') nowy.roszady[b.kolor] = { krotka: false, dluga: false };
-  for (const pole of [z, na]) {
-    if (pole.w === 7 && pole.k === 0) nowy.roszady.w.dluga = false;
-    if (pole.w === 7 && pole.k === 7) nowy.roszady.w.krotka = false;
-    if (pole.w === 0 && pole.k === 0) nowy.roszady.b.dluga = false;
-    if (pole.w === 0 && pole.k === 7) nowy.roszady.b.krotka = false;
-  }
-  return nowy;
-}
-
-// Ruchy, po których własny król nie zostaje w szachu.
-function legalneRuchy(st, w, k) {
-  const b = st.plansza[w][k];
-  return ruchyBierki(st, w, k).filter(r => !czySzach(wykonaj(st, r), b.kolor));
-}
-
-// ---------- Remisy ----------
-
-// Pozycja do porównań przy powtórzeniach: bierki, strona na ruchu, prawa do roszady
-// i pole bicia w przelocie (tylko gdy takie bicie jest naprawdę możliwe).
-function kluczPozycji(st) {
-  const bierki = st.plansza.map(rzad => rzad.map(b =>
-    !b ? '.' : b.kolor === 'w' ? b.typ.toUpperCase() : b.typ).join('')).join('/');
-  const r = st.roszady;
-  const roszady = (r.w.krotka ? 'K' : '') + (r.w.dluga ? 'Q' : '') + (r.b.krotka ? 'k' : '') + (r.b.dluga ? 'q' : '');
-  let ep = '-';
-  if (st.enPassant) {
-    const krok = st.naRuchu === 'w' ? 1 : -1;  // pionki bijące stoją rząd „za” polem bicia
-    for (const dk of [-1, 1]) {
-      const w = st.enPassant.w + krok, k = st.enPassant.k + dk;
-      const b = naPlanszy(w, k) && st.plansza[w][k];
-      if (b && b.typ === 'p' && b.kolor === st.naRuchu &&
-          legalneRuchy(st, w, k).some(m => m.wPrzelocie)) ep = `${st.enPassant.w}${st.enPassant.k}`;
-    }
-  }
-  return `${bierki} ${st.naRuchu} ${roszady} ${ep}`;
-}
-
-// Za mało bierek, żeby ktokolwiek mógł dać mata:
-// król na króla, król i goniec lub skoczek na króla, gońce tylko na polach jednego koloru.
-function brakMaterialu(st) {
-  const inne = [];
-  const gonce = [];
-  for (let w = 0; w < 8; w++)
-    for (let k = 0; k < 8; k++) {
-      const b = st.plansza[w][k];
-      if (!b || b.typ === 'k') continue;
-      if (b.typ === 'b') gonce.push((w + k) % 2);
-      else inne.push(b.typ);
-    }
-  if (inne.length === 0 && gonce.length === 0) return true;                // K vs K
-  if (inne.length === 1 && inne[0] === 'n' && gonce.length === 0) return true; // K+S vs K
-  if (inne.length === 0 && gonce.every(c => c === gonce[0])) return true;  // same gońce jednego koloru pól
-  return false;
-}
-
-const OPISY_KONCA = {
-  pat: ['Pat', kto => `${kto} nie mają żadnego ruchu, ale nie są szachowane.`],
-  powtorzenie: ['Remis', () => 'Ta sama pozycja powtórzyła się trzy razy.'],
-  ruchy50: ['Remis', () => 'Zasada 50 ruchów: przez 50 ruchów nie było bicia ani ruchu pionkiem.'],
-  material: ['Remis', () => 'Za mało bierek, żeby dać mata.'],
-  zgoda: ['Remis', () => 'Gracze zgodzili się na remis.']
-};
-
-function czyJestJakisRuch(st, kolor) {
-  for (let w = 0; w < 8; w++)
-    for (let k = 0; k < 8; k++) {
-      const b = st.plansza[w][k];
-      if (b && b.kolor === kolor && legalneRuchy(st, w, k).length) return true;
-    }
-  return false;
+  ruchBota();
 }
 
 // ---------- Rysowanie i obsługa kliknięć ----------
@@ -298,7 +75,10 @@ function rysuj() {
 
 function pokazStatus() {
   const kto = stan.naRuchu === 'w' ? 'białych' : 'czarnych';
-  if (stan.koniec === 'mat') {
+  plansza.classList.toggle('czeka', botMysli);
+  if (botMysli && !stan.koniec) {
+    status.textContent = `${gra.poziom.nazwa} myśli…`;
+  } else if (stan.koniec === 'mat') {
     status.textContent = `Szach mat! Wygrywają ${stan.naRuchu === 'w' ? 'czarne' : 'białe'}.`;
   } else if (stan.koniec) {
     status.textContent = stan.koniec === 'pat' ? 'Pat – remis.' : `Remis – ${OPISY_KONCA[stan.koniec][1]().toLowerCase()}`;
@@ -310,13 +90,16 @@ function pokazStatus() {
     const slowo = n === 1 ? 'możliwy ruch'
       : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14)) ? 'możliwe ruchy' : 'możliwych ruchów';
     status.textContent = `${NAZWY[b.typ]}: ${n} ${slowo}`;
+  } else if (gra.tryb === 'bot') {
+    status.textContent = 'Twój ruch';
   } else {
     status.textContent = `Ruch ${kto}`;
   }
 }
 
 function kliknij(w, k) {
-  if (stan.koniec || czekaNaPromocje) return;
+  if (stan.koniec || czekaNaPromocje || botMysli) return;
+  if (gra.tryb === 'bot' && stan.naRuchu !== gra.kolorGracza) return;
   const b = stan.plansza[w][k];
   const ruch = mozliweRuchy.find(r => r.na.w === w && r.na.k === k);
 
@@ -336,6 +119,7 @@ function kliknij(w, k) {
 
 function zagraj(ruch, promujNa) {
   stan = wykonaj(stan, ruch, promujNa);
+  polruchGry++;
   ostatniRuch = [ruch.z, ruch.na];
   wybrane = null;
   mozliweRuchy = [];
@@ -356,6 +140,7 @@ function zagraj(ruch, promujNa) {
   }
   rysuj();
   if (stan.koniec) pokazKoniecGry();
+  else ruchBota();
 }
 
 // Okienko z wynikiem po zakończeniu partii.
@@ -369,6 +154,8 @@ function pokazKoniecGry() {
         <div class="koniec-krol">${rysujBierke('k', wygrany)}</div>
         <h2>Szach mat!</h2>
         <p>Wygrywają <strong>${wygrany === 'w' ? 'białe' : 'czarne'}</strong></p>
+        ${gra.tryb === 'bot' ? `<p class="koniec-bot">${wygrany === gra.kolorGracza
+          ? `Pokonałeś bota: ${gra.poziom.nazwa} (${gra.poziom.elo})!` : `Wygrał bot: ${gra.poziom.nazwa} (${gra.poziom.elo}).`}</p>` : ''}
         <button class="koniec-nowa">Nowa gra</button>
         <button class="koniec-zamknij">Zobacz planszę</button>
       </div>`;
@@ -409,14 +196,11 @@ function wybierzPromocje(ruch) {
   document.querySelector('.plansza-ramka').appendChild(okno);
 }
 
-document.getElementById('nowa').addEventListener('click', () => {
-  document.querySelector('.promocja')?.remove();
-  document.querySelector('.koniec-gry')?.remove();
-  nowaGra();
-});
+document.getElementById('nowa').addEventListener('click', nowaGra);
 // Remis za zgodą: gracz na ruchu proponuje, przeciwnik przyjmuje albo odrzuca.
 document.getElementById('remis').addEventListener('click', () => {
-  if (stan.koniec || czekaNaPromocje || document.querySelector('.propozycja-remisu')) return;
+  if (stan.koniec || czekaNaPromocje || botMysli || document.querySelector('.propozycja-remisu')) return;
+  if (gra.tryb === 'bot') return zaproponujRemisBotowi();
   const proponuje = stan.naRuchu === 'w' ? 'Białe' : 'Czarne';
   const odpowiada = stan.naRuchu === 'w' ? 'Czarne' : 'Białe';
   const okno = document.createElement('div');
@@ -439,4 +223,156 @@ document.getElementById('remis').addEventListener('click', () => {
 
 document.getElementById('obroc').addEventListener('click', () => { obrocona = !obrocona; rysuj(); });
 
+// ---------- Bot ----------
+
+// Silnik liczy w osobnym wątku (Web Worker), żeby strona nie zamarzała.
+// Worker tworzymy z kodu funkcji stworzSilnik – działa też przy otwarciu pliku z dysku.
+let silnikWorker = null;
+let silnikLokalny = null;
+const oczekujace = new Map();
+let numerZapytania = 0;
+
+function uruchomSilnik() {
+  try {
+    const kod = `const KSIAZKA_DEBIUTOW = ${JSON.stringify(KSIAZKA_DEBIUTOW)};
+${stworzSilnik.toString()}
+const silnik = stworzSilnik();
+self.onmessage = e => {
+  const { id, typ, pozycja, poziom, opcje } = e.data;
+  const wynik = typ === 'ruch' ? silnik.najlepszyRuch(pozycja, poziom, opcje) : silnik.ocenPozycje(pozycja);
+  self.postMessage({ id, wynik });
+};`;
+    silnikWorker = new Worker(URL.createObjectURL(new Blob([kod], { type: 'text/javascript' })));
+    silnikWorker.onmessage = e => {
+      const zadanie = oczekujace.get(e.data.id);
+      oczekujace.delete(e.data.id);
+      zadanie?.resolve(e.data.wynik);
+    };
+    silnikWorker.onerror = () => {
+      // przeglądarka nie pozwala na wątek – liczymy w głównym wątku
+      silnikWorker = null;
+      for (const [, z] of oczekujace) policzLokalnie(z);
+      oczekujace.clear();
+    };
+  } catch (e) {
+    silnikWorker = null;
+  }
+}
+
+function policzLokalnie(z) {
+  setTimeout(() => {
+    silnikLokalny ||= stworzSilnik();
+    const { typ, pozycja, poziom, opcje } = z.dane;
+    z.resolve(typ === 'ruch' ? silnikLokalny.najlepszyRuch(pozycja, poziom, opcje) : silnikLokalny.ocenPozycje(pozycja));
+  }, 30);
+}
+
+function zapytajSilnik(dane) {
+  return new Promise(resolve => {
+    const id = ++numerZapytania;
+    const zadanie = { dane, resolve };
+    if (silnikWorker) {
+      oczekujace.set(id, zadanie);
+      silnikWorker.postMessage({ id, ...dane });
+    } else policzLokalnie(zadanie);
+  });
+}
+
+function restartujSilnik() {
+  silnikWorker?.terminate();
+  oczekujace.clear();
+  uruchomSilnik();
+}
+
+const czekaj = ms => new Promise(r => setTimeout(r, ms));
+
+async function ruchBota() {
+  if (gra.tryb !== 'bot' || stan.koniec || stan.naRuchu === gra.kolorGracza || botMysli) return;
+  const moja = generacja;
+  botMysli = true;
+  rysuj();
+  const start = Date.now();
+  const wynik = await zapytajSilnik({ typ: 'ruch', pozycja: stan, poziom: gra.poziom, opcje: { numerPolruchu: polruchGry } });
+  await czekaj(Math.max(0, 450 - (Date.now() - start)));   // żeby ruch nie pojawiał się „znikąd”
+  if (moja !== generacja || !wynik) return;
+  botMysli = false;
+  const ruch = legalneRuchy(stan, wynik.z.w, wynik.z.k).find(r => r.na.w === wynik.na.w && r.na.k === wynik.na.k);
+  if (!ruch) { rysuj(); return; }
+  zagraj(ruch, wynik.promocja || 'q');
+}
+
+// Bot przyjmuje remis, gdy uważa, że stoi gorzej.
+async function zaproponujRemisBotowi() {
+  const okno = document.createElement('div');
+  okno.className = 'propozycja-remisu';
+  okno.innerHTML = '<span>Bot zastanawia się nad remisem…</span>';
+  document.querySelector('.przyciski').after(okno);
+  const moja = generacja;
+  const ocenaGracza = await zapytajSilnik({ typ: 'ocena', pozycja: stan });
+  await czekaj(500);
+  if (moja !== generacja || stan.koniec) { okno.remove(); return; }
+  if (-ocenaGracza < -80) {
+    okno.remove();
+    stan.koniec = 'zgoda';
+    rysuj();
+    pokazKoniecGry();
+  } else {
+    okno.querySelector('span').textContent = 'Bot odrzuca remis – uważa, że ma jeszcze szanse.';
+    setTimeout(() => okno.remove(), 3000);
+  }
+}
+
+// ---------- Panel wyboru przeciwnika ----------
+
+function pokazPrzeciwnika() {
+  if (gra.tryb === 'bot') {
+    const p = gra.poziom;
+    infoPrzeciwnik.innerHTML = `Grasz ${gra.kolorGracza === 'w' ? 'białymi' : 'czarnymi'} przeciwko: <strong>${p.nazwa}</strong>${p.skrot ? ` <span class="tytul">${p.skrot}</span>` : ''} · Elo ${p.elo}`;
+  } else {
+    infoPrzeciwnik.textContent = 'Dwóch graczy przy jednym komputerze';
+  }
+}
+
+function zbudujPanel() {
+  const lista = document.getElementById('poziomy');
+  for (const p of POZIOMY_BOTA) {
+    const el = document.createElement('button');
+    el.className = 'poziom';
+    el.dataset.id = p.id;
+    el.innerHTML = `
+      <span class="poziom-gora">
+        <span class="poziom-nazwa">${p.nazwa}${p.skrot ? ` <span class="tytul">${p.skrot}</span>` : ''}</span>
+        <span class="poziom-elo">${p.elo}</span>
+      </span>
+      <span class="poziom-opis">${p.opis}</span>`;
+    el.addEventListener('click', () => { ustawienia.poziomId = p.id; odswiezPanel(); });
+    lista.appendChild(el);
+  }
+  for (const b of document.querySelectorAll('#tryb button'))
+    b.addEventListener('click', () => { ustawienia.tryb = b.dataset.tryb; odswiezPanel(); });
+  for (const b of document.querySelectorAll('#kolor button'))
+    b.addEventListener('click', () => { ustawienia.kolor = b.dataset.kolor; odswiezPanel(); });
+  document.getElementById('start').addEventListener('click', () => {
+    const kolor = ustawienia.kolor === 'losowo' ? (Math.random() < 0.5 ? 'w' : 'b') : ustawienia.kolor;
+    gra = {
+      tryb: ustawienia.tryb,
+      kolorGracza: kolor,
+      poziom: POZIOMY_BOTA.find(p => p.id === ustawienia.poziomId)
+    };
+    if (gra.tryb === 'dwoch') obrocona = false;
+    nowaGra();
+  });
+  odswiezPanel();
+}
+
+function odswiezPanel() {
+  for (const b of document.querySelectorAll('#tryb button')) b.classList.toggle('aktywny', b.dataset.tryb === ustawienia.tryb);
+  for (const b of document.querySelectorAll('#kolor button')) b.classList.toggle('aktywny', b.dataset.kolor === ustawienia.kolor);
+  for (const b of document.querySelectorAll('.poziom')) b.classList.toggle('aktywny', +b.dataset.id === ustawienia.poziomId);
+  document.getElementById('opcje-bota').classList.toggle('ukryte', ustawienia.tryb !== 'bot');
+  document.getElementById('start').textContent = ustawienia.tryb === 'bot' ? 'Zagraj z botem' : 'Nowa gra dla dwóch graczy';
+}
+
+uruchomSilnik();
+zbudujPanel();
 nowaGra();
