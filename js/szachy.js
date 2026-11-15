@@ -285,10 +285,41 @@ function zagraj(ruch, promujNa) {
   ostatniRuch = [ruch.z, ruch.na];
   wybrane = null;
   mozliweRuchy = [];
+  // Szach mat: król jest szachowany, a żadna bierka nie ma ruchu, który by go ratował
+  // (ucieczka króla, zasłonięcie albo zbicie atakującej bierki). Bez szachu to pat.
   if (!czyJestJakisRuch(stan, stan.naRuchu)) {
     stan.koniec = czySzach(stan, stan.naRuchu) ? 'mat' : 'pat';
   }
   rysuj();
+  if (stan.koniec) pokazKoniecGry();
+}
+
+// Okienko z wynikiem po zakończeniu partii.
+function pokazKoniecGry() {
+  const okno = document.createElement('div');
+  okno.className = 'koniec-gry';
+  if (stan.koniec === 'mat') {
+    const wygrany = przeciwnik(stan.naRuchu);
+    okno.innerHTML = `
+      <div class="koniec-karta">
+        <div class="koniec-krol">${rysujBierke('k', wygrany)}</div>
+        <h2>Szach mat!</h2>
+        <p>Wygrywają <strong>${wygrany === 'w' ? 'białe' : 'czarne'}</strong></p>
+        <button class="koniec-nowa">Nowa gra</button>
+        <button class="koniec-zamknij">Zobacz planszę</button>
+      </div>`;
+  } else {
+    okno.innerHTML = `
+      <div class="koniec-karta">
+        <h2>Pat</h2>
+        <p>Remis – ${stan.naRuchu === 'w' ? 'białe' : 'czarne'} nie mają żadnego ruchu, ale nie są szachowane.</p>
+        <button class="koniec-nowa">Nowa gra</button>
+        <button class="koniec-zamknij">Zobacz planszę</button>
+      </div>`;
+  }
+  okno.querySelector('.koniec-nowa').addEventListener('click', () => { okno.remove(); nowaGra(); });
+  okno.querySelector('.koniec-zamknij').addEventListener('click', () => okno.remove());
+  document.querySelector('.plansza-ramka').appendChild(okno);
 }
 
 // Okienko wyboru bierki przy promocji pionka.
@@ -314,6 +345,7 @@ function wybierzPromocje(ruch) {
 
 document.getElementById('nowa').addEventListener('click', () => {
   document.querySelector('.promocja')?.remove();
+  document.querySelector('.koniec-gry')?.remove();
   nowaGra();
 });
 document.getElementById('obroc').addEventListener('click', () => { obrocona = !obrocona; rysuj(); });
