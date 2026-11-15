@@ -17,6 +17,7 @@ Otwórz `index.html` w przeglądarce. Nie trzeba niczego instalować.
 - Remisy: pat, trzykrotne powtórzenie pozycji, zasada 50 ruchów, brak materiału do mata oraz remis za zgodą (przycisk „Zaproponuj remis”)
 - Gra z botem: wybór koloru (białe, czarne, losowo) i poziomu w panelu po lewej
 - Gra dla dwóch graczy przy jednym komputerze
+- Przegląd partii po jej zakończeniu: na początek, ruch wstecz, ruch naprzód, na koniec (także strzałkami ←/→ oraz Home/End)
 - Podświetlenie ostatniego ruchu, obracanie planszy, ustawianie od nowa
 
 ## Poziomy bota
@@ -45,7 +46,7 @@ Bot (`js/silnik.js`) przeszukuje ruchy algorytmem alfa-beta (pogłębianie itera
 - W przeglądarce: otwórz `testy/index.html` – uruchamia wszystkie testy, także klikanie po planszy i grę z botem.
 - W Node: `node testy/uruchom.js` – testy logiki (bez testów strony).
 
-Testują m.in. ruchy każdej bierki, szach i związanie, roszadę, przelot, promocję, mat, pat, wszystkie remisy, generator ruchów bota (perft na 5 pozycjach wzorcowych), taktykę bota (maty, widełki), legalność ruchów na każdym poziomie, książkę debiutów i partie bot kontra bot.
+Testują m.in. przegląd partii, ruchy każdej bierki, szach i związanie, roszadę, przelot, promocję, mat, pat, wszystkie remisy, generator ruchów bota (perft na 5 pozycjach wzorcowych), taktykę bota (maty, widełki), legalność ruchów na każdym poziomie, książkę debiutów i partie bot kontra bot.
 
 ## Plany
 
