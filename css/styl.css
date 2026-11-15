@@ -21,7 +21,96 @@ body {
   font-family: Georgia, "Times New Roman", serif;
 }
 
-main { text-align: center; padding: 24px; }
+main { padding: 24px; }
+
+/* Układ: panel po lewej, gra po prawej */
+.uklad { display: flex; gap: 32px; align-items: flex-start; justify-content: center; }
+.gra { text-align: center; }
+
+.panel {
+  width: 300px;
+  flex-shrink: 0;
+  padding: 18px;
+  background: #2a231d;
+  border: 1px solid #4a3a2e;
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  text-align: left;
+}
+.panel h2 { margin: 0 0 12px; font-size: 1.3rem; }
+.panel h3 { margin: 16px 0 8px; font-size: 0.95rem; opacity: 0.75; font-weight: normal; text-transform: uppercase; letter-spacing: 0.06em; }
+
+.przelacznik { display: flex; background: #1d1814; border-radius: 8px; padding: 3px; gap: 3px; }
+.przelacznik button {
+  flex: 1;
+  padding: 7px 6px;
+  font-size: 0.9rem;
+  background: transparent;
+  border: none;
+}
+.przelacznik button.aktywny { background: #6d4a34; }
+
+.poziomy {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 46vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+.poziom {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  text-align: left;
+  background: #332a23;
+  border: 1px solid #4a3a2e;
+}
+.poziom:hover { background: #3d3229; }
+.poziom.aktywny { background: #5a3d2b; border-color: #d9a86c; }
+.poziom-gora { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.poziom-nazwa { font-weight: bold; }
+.poziom-elo {
+  font-family: Arial, sans-serif;
+  font-size: 0.8rem;
+  font-weight: bold;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: #1d1814;
+  color: #e8c48f;
+}
+.poziom-opis { font-size: 0.8rem; opacity: 0.7; }
+.tytul {
+  font-family: Arial, sans-serif;
+  font-size: 0.7rem;
+  font-weight: bold;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #b8862f;
+  color: #1d1814;
+  vertical-align: middle;
+}
+.przypis { font-size: 0.75rem; opacity: 0.55; margin: 10px 0 0; line-height: 1.4; }
+.ukryte { display: none; }
+
+.start {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  font-weight: bold;
+  background: #8a5a2b;
+  border-color: #b07a45;
+}
+.start:hover { background: #a06a35; }
+
+.przeciwnik-info { margin: 0 0 4px; font-size: 0.95rem; opacity: 0.85; }
+.plansza.czeka .pole { cursor: wait; }
+
+@media (max-width: 1000px) {
+  .uklad { flex-direction: column-reverse; align-items: center; }
+  .panel { width: min(640px, 92vw); }
+}
 
 h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 
@@ -135,6 +224,7 @@ h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 .koniec-karta h2 { margin: 6px 0 4px; font-size: 2rem; }
 .koniec-karta p { margin: 0 0 18px; font-size: 1.15rem; }
 .koniec-karta button { margin: 0 4px; }
+.koniec-karta .koniec-bot { font-size: 1rem; opacity: 0.8; margin-top: -10px; }
 .koniec-zamknij { background: transparent; }
 .remis-krole { display: flex; justify-content: center; gap: 4px; }
 .remis-krole .bierka-svg { width: 70px; height: 70px; }
