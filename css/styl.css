@@ -91,6 +91,7 @@ h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 .promocja {
   position: absolute;
   inset: 0;
+  z-index: 10;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -109,6 +110,33 @@ h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 }
 .promocja-wybor button:hover { background: #f7e7c6; }
 .promocja-wybor .bierka-svg { width: 100%; height: 100%; }
+
+/* Okienko końca gry */
+.koniec-gry {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.55);
+  border-radius: 10px;
+  z-index: 10;
+  animation: pojaw 0.3s ease-out;
+}
+.koniec-karta {
+  min-width: 260px;
+  padding: 24px 32px;
+  background: #2e2620;
+  border: 2px solid #7a5640;
+  border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6);
+}
+.koniec-krol .bierka-svg { width: 90px; height: 90px; }
+.koniec-karta h2 { margin: 6px 0 4px; font-size: 2rem; }
+.koniec-karta p { margin: 0 0 18px; font-size: 1.15rem; }
+.koniec-karta button { margin: 0 4px; }
+.koniec-zamknij { background: transparent; }
+@keyframes pojaw { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 
 .bierka-svg {
   position: relative;
