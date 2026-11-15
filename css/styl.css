@@ -136,6 +136,20 @@ h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 .koniec-karta p { margin: 0 0 18px; font-size: 1.15rem; }
 .koniec-karta button { margin: 0 4px; }
 .koniec-zamknij { background: transparent; }
+.remis-krole { display: flex; justify-content: center; gap: 4px; }
+.remis-krole .bierka-svg { width: 70px; height: 70px; }
+
+.propozycja-remisu {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 10px 14px;
+  background: #2e2620;
+  border: 1px solid #7a5640;
+  border-radius: 8px;
+}
+.propozycja-remisu button { padding: 6px 12px; }
 @keyframes pojaw { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
 
 .bierka-svg {
