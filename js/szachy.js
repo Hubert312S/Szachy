@@ -15,6 +15,8 @@ let gra = { tryb: 'dwoch', kolorGracza: 'w', poziom: null };
 let botMysli = false;
 let generacja = 0;      // zmienia się przy nowej grze – stare odpowiedzi bota są ignorowane
 let polruchGry = 0;
+let historia = [];          // wszystkie pozycje partii (do przeglądu po jej zakończeniu)
+let przegladIndeks = null;  // którą pozycję z historii pokazujemy; null = zwykła gra
 
 const plansza = document.getElementById('plansza');
 const status = document.getElementById('status');
@@ -34,6 +36,9 @@ function nowaGra() {
   ostatniRuch = [];
   czekaNaPromocje = null;
   historiaPozycji = { [kluczPozycji(stan)]: 1 };
+  historia = [{ stan, ostatniRuch: [], opis: 'Pozycja początkowa' }];
+  przegladIndeks = null;
+  document.getElementById('przeglad').classList.add('ukryte');
   document.querySelector('.propozycja-remisu')?.remove();
   pokazPrzeciwnika();
   rysuj();
@@ -44,7 +49,10 @@ function nowaGra() {
 
 function rysuj() {
   plansza.innerHTML = '';
-  const krolWSzachu = czySzach(stan, stan.naRuchu) ? znajdzKrola(stan, stan.naRuchu) : null;
+  // w przeglądzie pokazujemy wybraną pozycję z historii, w grze – bieżącą
+  const widok = przegladIndeks !== null ? historia[przegladIndeks] : { stan, ostatniRuch };
+  const st = widok.stan;
+  const krolWSzachu = czySzach(st, st.naRuchu) ? znajdzKrola(st, st.naRuchu) : null;
 
   for (let i = 0; i < 8; i++) {
     for (let j = 0; j < 8; j++) {
@@ -53,13 +61,13 @@ function rysuj() {
       const pole = document.createElement('div');
       pole.className = 'pole ' + ((w + k) % 2 === 0 ? 'jasne' : 'ciemne');
       if (wybrane && wybrane.w === w && wybrane.k === k) pole.classList.add('wybrane');
-      if (ostatniRuch.some(p => p.w === w && p.k === k)) pole.classList.add('ostatni');
+      if (widok.ostatniRuch.some(p => p.w === w && p.k === k)) pole.classList.add('ostatni');
       if (krolWSzachu && krolWSzachu.w === w && krolWSzachu.k === k) pole.classList.add('szach');
 
       if (j === 0) pole.insertAdjacentHTML('beforeend', `<span class="wsp cyfra">${8 - w}</span>`);
       if (i === 7) pole.insertAdjacentHTML('beforeend', `<span class="wsp litera">${LITERY[k]}</span>`);
 
-      const b = stan.plansza[w][k];
+      const b = st.plansza[w][k];
       if (b) pole.insertAdjacentHTML('beforeend', rysujBierke(b.typ, b.kolor));
 
       const ruch = mozliweRuchy.find(r => r.na.w === w && r.na.k === k);
@@ -76,6 +84,9 @@ function rysuj() {
 function pokazStatus() {
   const kto = stan.naRuchu === 'w' ? 'białych' : 'czarnych';
   plansza.classList.toggle('czeka', botMysli);
+  if (przegladIndeks !== null) {
+    pokazPrzeglad();
+  }
   if (botMysli && !stan.koniec) {
     status.textContent = `${gra.poziom.nazwa} myśli…`;
   } else if (stan.koniec === 'mat') {
@@ -118,6 +129,7 @@ function kliknij(w, k) {
 }
 
 function zagraj(ruch, promujNa) {
+  const opis = opisRuchu(stan, ruch, promujNa);
   stan = wykonaj(stan, ruch, promujNa);
   polruchGry++;
   ostatniRuch = [ruch.z, ruch.na];
@@ -138,9 +150,53 @@ function zagraj(ruch, promujNa) {
   } else if (stan.polruchyBezBicia >= 100) {
     stan.koniec = 'ruchy50';
   }
+  historia.push({ stan, ostatniRuch, opis });
   rysuj();
   if (stan.koniec) pokazKoniecGry();
   else ruchBota();
+}
+
+// Opis ruchu do przeglądu, np. „Skoczek g1–f3”, „Pionek e5×d6”, „Król: roszada krótka”.
+function opisRuchu(st, ruch, promujNa) {
+  const b = st.plansza[ruch.z.w][ruch.z.k];
+  const pole = p => LITERY[p.k] + (8 - p.w);
+  if (ruch.roszada) return `${NAZWY.k}: roszada ${ruch.roszada === 'krotka' ? 'krótka' : 'długa'}`;
+  const bicie = st.plansza[ruch.na.w][ruch.na.k] || ruch.wPrzelocie;
+  let tekst = `${NAZWY[b.typ]} ${pole(ruch.z)}${bicie ? '×' : '–'}${pole(ruch.na)}`;
+  if (ruch.promocja) tekst += ` = ${NAZWY[promujNa || 'q'].toLowerCase()}`;
+  return tekst;
+}
+
+// ---------- Przegląd partii ----------
+
+function wlaczPrzeglad() {
+  przegladIndeks = historia.length - 1;
+  document.getElementById('przeglad').classList.remove('ukryte');
+  rysuj();
+}
+
+function przejdzDo(indeks) {
+  if (przegladIndeks === null) return;
+  przegladIndeks = Math.max(0, Math.min(historia.length - 1, indeks));
+  document.querySelector('.koniec-gry')?.remove();
+  rysuj();
+}
+
+function pokazPrzeglad() {
+  const n = historia.length - 1;
+  const i = przegladIndeks;
+  const info = document.getElementById('przeglad-info');
+  if (i === 0) info.textContent = `Pozycja początkowa (0 z ${n})`;
+  else {
+    const numer = Math.ceil(i / 2);
+    const kto = i % 2 === 1 ? 'białe' : 'czarne';
+    const ktoPierwszy = historia[0].stan.naRuchu;
+    const strona = ktoPierwszy === 'w' ? kto : (kto === 'białe' ? 'czarne' : 'białe');
+    info.textContent = `Półruch ${i} z ${n} · ${numer}. ${strona}: ${historia[i].opis}`;
+  }
+  const [poczatek, wstecz, naprzod, koniec] = document.querySelectorAll('#przeglad button');
+  poczatek.disabled = wstecz.disabled = i === 0;
+  naprzod.disabled = koniec.disabled = i === n;
 }
 
 // Okienko z wynikiem po zakończeniu partii.
@@ -173,6 +229,7 @@ function pokazKoniecGry() {
   okno.querySelector('.koniec-nowa').addEventListener('click', () => { okno.remove(); nowaGra(); });
   okno.querySelector('.koniec-zamknij').addEventListener('click', () => okno.remove());
   document.querySelector('.plansza-ramka').appendChild(okno);
+  wlaczPrzeglad();
 }
 
 // Okienko wyboru bierki przy promocji pionka.
@@ -222,6 +279,17 @@ document.getElementById('remis').addEventListener('click', () => {
 });
 
 document.getElementById('obroc').addEventListener('click', () => { obrocona = !obrocona; rysuj(); });
+
+// Przyciski przeglądu partii i strzałki na klawiaturze.
+document.getElementById('przeglad-poczatek').addEventListener('click', () => przejdzDo(0));
+document.getElementById('przeglad-wstecz').addEventListener('click', () => przejdzDo(przegladIndeks - 1));
+document.getElementById('przeglad-naprzod').addEventListener('click', () => przejdzDo(przegladIndeks + 1));
+document.getElementById('przeglad-koniec').addEventListener('click', () => przejdzDo(historia.length - 1));
+document.addEventListener('keydown', e => {
+  if (przegladIndeks === null) return;
+  const cel = { ArrowLeft: przegladIndeks - 1, ArrowRight: przegladIndeks + 1, Home: 0, End: historia.length - 1 }[e.key];
+  if (cel !== undefined) { e.preventDefault(); przejdzDo(cel); }
+});
 
 // ---------- Bot ----------
 
