@@ -467,6 +467,15 @@ function odswiezPanel() {
   document.getElementById('start').textContent = ustawienia.tryb === 'bot' ? 'Zagraj z botem' : 'Nowa gra dla dwóch graczy';
 }
 
+// Scena 16:9: skalujemy całą grę (1920×1080) do rozmiaru okna, zachowując proporcje.
+function dopasujScene() {
+  const scena = document.querySelector('.scena');
+  if (!scena) return;
+  scena.style.setProperty('--skala', Math.min(window.innerWidth / 1920, window.innerHeight / 1080));
+}
+window.addEventListener('resize', dopasujScene);
+dopasujScene();
+
 uruchomSilnik();
 zbudujPanel();
 nowaGra();

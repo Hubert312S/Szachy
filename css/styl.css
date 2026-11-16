@@ -318,3 +318,32 @@ button {
 button:hover { background: #6d4a34; }
 
 .podpowiedz { font-size: 0.85rem; opacity: 0.55; margin-top: 14px; }
+
+/* ---------- Scena 16:9 ----------
+   Cała gra jest ułożona na scenie 1920×1080 i skalowana do okna (js/szachy.js: dopasujScene),
+   więc zawsze ma proporcje 16:9 – na ekranach o innych proporcjach pojawiają się ciemne pasy. */
+body.tryb-16x9 {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+  background: #0d0b09;
+}
+.scena {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 1920px;
+  height: 1080px;
+  transform: translate(-50%, -50%) scale(var(--skala, 1));
+  background: radial-gradient(circle at top, #2e2924, var(--tlo));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+.scena main { padding: 0; }
+.scena .uklad { grid-template-columns: 330px auto 330px; gap: 44px; justify-items: stretch; }
+.scena .plansza { --rozmiar: 960px; }
+.scena .panel, .scena .info { width: auto; }
+.scena .poziomy { max-height: 640px; }
+
