@@ -1,6 +1,6 @@
 # Szachy
 
-Szachy w przeglądarce z własnymi grafikami bierek narysowanymi w SVG, z botem na 12 poziomach trudności.
+Szachy w przeglądarce z własnymi grafikami bierek narysowanymi w SVG, z botem na 12 poziomach trudności i „Hell botem” (Stockfish 16.1).
 
 ## Uruchomienie
 
@@ -36,10 +36,15 @@ Otwórz `index.html` w przeglądarce. Nie trzeba niczego instalować.
 | Arcymistrz | 2500 | GM |
 | Super-arcymistrz | 2700 | GM |
 | Mistrz świata (poziom Magnusa Carlsena) | 2823 | GM |
+| **Hell bot** – Stockfish 16.1 | 3000+ | SF |
 
 Progi tytułów według FIDE: CM od 2200, FM od 2300, IM od 2400, GM od 2500 Elo. Elo bota jest orientacyjne.
 
-Bot (`js/silnik.js`) przeszukuje ruchy algorytmem alfa-beta (pogłębianie iteracyjne, przeszukiwanie bić, tablica transpozycji, ruch zerowy, redukcja późnych ruchów), ma książkę ponad 30 popularnych debiutów i liczy w osobnym wątku (Web Worker), więc strona nie zamarza. Słabsze poziomy liczą płycej i celowo popełniają błędy.
+Własny bot (`js/silnik.js`) przeszukuje ruchy algorytmem alfa-beta (pogłębianie iteracyjne, przeszukiwanie bić, tablica transpozycji, ruch zerowy, redukcja późnych ruchów, odcinanie beznadziejnych ruchów). Ocenia materiał, ustawienie bierek, strukturę pionków (zdwojone, izolowane, wolne), wieże na otwartych liniach, ruchliwość figur i osłonę króla. Ma książkę ponad 30 popularnych debiutów i liczy w osobnym wątku (Web Worker), więc strona nie zamarza. Słabsze poziomy liczą płycej i celowo popełniają błędy.
+
+## Hell bot
+
+Najwyższy poziom to Stockfish 16.1 w wersji asm.js (`js/stockfish.js`, ok. 10 MB, pobierany przez przeglądarkę dopiero przy pierwszej grze z Hell botem). Stockfish działa w osobnym wątku i komunikuje się protokołem UCI (`js/hellbot.js`). Licencja Stockfisha: GPLv3 – https://github.com/nmrugg/stockfish.js
 
 ## Testy
 
@@ -60,6 +65,8 @@ css/styl.css
 js/bierki.js    – grafiki bierek (SVG)
 js/zasady.js    – zasady gry (ruchy, szach, mat, remisy)
 js/silnik.js    – silnik bota i poziomy
+js/hellbot.js   – Hell bot: obsługa Stockfisha
+js/stockfish.js – Stockfish 16.1 (GPLv3)
 js/szachy.js    – strona gry, panel, gra z botem
 testy/          – testy (index.html w przeglądarce, uruchom.js w Node)
 ```

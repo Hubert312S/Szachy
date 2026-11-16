@@ -55,13 +55,19 @@ grupa('Poziomy bota', () => {
 
   test('Tytuły zgadzają się z progami FIDE (CM 2200, FM 2300, IM 2400, GM 2500)', () => {
     const prog = { CM: 2200, FM: 2300, IM: 2400, GM: 2500 };
-    for (const p of POZIOMY_BOTA) if (p.skrot) oczekuj(p.elo >= prog[p.skrot]).toBeTruthy();
+    for (const p of POZIOMY_BOTA) if (prog[p.skrot]) oczekuj(p.elo >= prog[p.skrot]).toBeTruthy();
   });
 
-  test('Najwyższy poziom to Magnus Carlsen (2823 – ranking FIDE, listopad 2026)', () => {
-    const naj = POZIOMY_BOTA[POZIOMY_BOTA.length - 1];
+  test('Najwyższy „ludzki” poziom to Magnus Carlsen (2823 – ranking FIDE, listopad 2026)', () => {
+    const naj = POZIOMY_BOTA.find(p => p.id === 12);
     oczekuj(naj.elo).toBe(2823);
     oczekuj(naj.opis).toContain('Carlsen');
+  });
+
+  test('Ostatni poziom to Hell bot oparty na Stockfishu', () => {
+    const hell = POZIOMY_BOTA[POZIOMY_BOTA.length - 1];
+    oczekuj(hell.nazwa).toBe('Hell bot');
+    oczekuj(hell.silnik).toBe('stockfish');
   });
 
   const pozycjeTestowe = [
@@ -70,7 +76,7 @@ grupa('Poziomy bota', () => {
     zFEN('8/5k2/8/3K4/8/8/3P4/8 w - -'),
     zFEN('r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R b KQkq -')
   ];
-  for (const p of POZIOMY_BOTA) {
+  for (const p of POZIOMY_BOTA.filter(p => !p.silnik)) {
     test(`Poziom „${p.nazwa}” (${p.elo}) zawsze gra legalne ruchy`, () => {
       for (const st of pozycjeTestowe) oczekuj(czyLegalny(st, silnik().najlepszyRuch(st, szybki(p, 80)))).toBeTruthy();
     });

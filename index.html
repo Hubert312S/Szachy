@@ -36,13 +36,15 @@
     </aside>
 
     <section class="gra">
-      <h1>Szachy</h1>
-      <p id="przeciwnik-info" class="przeciwnik-info"></p>
-      <p id="status">Ruch białych</p>
-
       <div class="plansza-ramka">
         <div id="plansza" class="plansza"></div>
       </div>
+    </section>
+
+    <section class="info">
+      <h1>Szachy</h1>
+      <p id="przeciwnik-info" class="przeciwnik-info"></p>
+      <p id="status">Ruch białych</p>
 
       <div id="przeglad" class="przeglad ukryte">
         <span class="przeglad-tytul">Przegląd partii</span>
@@ -58,6 +60,7 @@
         <button id="obroc">Obróć planszę</button>
         <button id="remis">Zaproponuj remis</button>
         <button id="nowa">Ustaw od nowa</button>
+        <button id="pelny-ekran">Pełny ekran (F11)</button>
       </div>
       <p class="podpowiedz">Kliknij bierkę, aby zobaczyć jej możliwe ruchy, potem kliknij pole docelowe.</p>
     </section>
@@ -66,6 +69,7 @@
   <script src="js/bierki.js"></script>
   <script src="js/zasady.js"></script>
   <script src="js/silnik.js"></script>
+  <script src="js/hellbot.js"></script>
   <script src="js/szachy.js"></script>
 </body>
 </html>

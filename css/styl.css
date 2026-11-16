@@ -23,9 +23,19 @@ body {
 
 main { padding: 24px; }
 
-/* Układ: panel po lewej, gra po prawej */
-.uklad { display: flex; gap: 32px; align-items: flex-start; justify-content: center; }
+/* Układ pod szeroki ekran 16:9: panel | plansza | informacje */
+.uklad {
+  display: grid;
+  grid-template-columns: 300px auto 300px;
+  gap: 36px;
+  align-items: center;
+  justify-content: center;
+}
 .gra { text-align: center; }
+.info { display: flex; flex-direction: column; align-items: stretch; text-align: center; }
+.info h1 { margin-top: 0; }
+.info .przyciski { flex-direction: column; margin-top: 16px; }
+.info .przeglad { margin-top: 12px; }
 
 .panel {
   width: 300px;
@@ -54,7 +64,7 @@ main { padding: 24px; }
   display: flex;
   flex-direction: column;
   gap: 6px;
-  max-height: 46vh;
+  max-height: calc(100vh - 410px);
   overflow-y: auto;
   padding-right: 4px;
 }
@@ -107,9 +117,20 @@ main { padding: 24px; }
 .przeciwnik-info { margin: 0 0 4px; font-size: 0.95rem; opacity: 0.85; }
 .plansza.czeka .pole { cursor: default; }
 
-@media (max-width: 1000px) {
-  .uklad { flex-direction: column-reverse; align-items: center; }
-  .panel { width: min(640px, 92vw); }
+/* Hell bot */
+.poziom.hell { background: linear-gradient(135deg, #3a1210, #5a1a12); border-color: #a33a22; }
+.poziom.hell:hover { background: linear-gradient(135deg, #4a1712, #6e2115); }
+.poziom.hell.aktywny { border-color: #ff6a3d; box-shadow: 0 0 12px rgba(255, 90, 40, 0.45); }
+.poziom.hell .poziom-nazwa { color: #ffb08a; }
+.poziom.hell .tytul { background: #d8461f; color: #fff2ea; }
+.poziom.hell .poziom-elo { color: #ff8a5c; }
+
+/* Węższe ekrany: panel pod planszą */
+@media (max-width: 1150px) {
+  .uklad { grid-template-columns: 1fr; justify-items: center; }
+  .plansza { --rozmiar: min(88vw, 640px); }
+  .panel, .info { width: min(640px, 92vw); }
+  .poziomy { max-height: 46vh; }
 }
 
 h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
@@ -125,7 +146,7 @@ h1 { margin: 0 0 4px; font-size: 2.4rem; letter-spacing: 0.08em; }
 }
 
 .plansza {
-  --rozmiar: min(80vmin, 640px);
+  --rozmiar: min(calc(100vh - 96px), calc(100vw - 800px), 1000px);
   width: var(--rozmiar);
   height: var(--rozmiar);
   display: grid;

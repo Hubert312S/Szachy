@@ -17,7 +17,9 @@ const POZIOMY_BOTA = [
   { id: 9,  nazwa: 'Mistrz międzynarodowy', skrot: 'IM', elo: 2400, opis: 'Tytuł FIDE od 2400 i normy turniejowe.',            czas: 1800 },
   { id: 10, nazwa: 'Arcymistrz',            skrot: 'GM', elo: 2500, opis: 'Najwyższy tytuł FIDE (od 2500 i normy).',           czas: 2500 },
   { id: 11, nazwa: 'Super-arcymistrz',      skrot: 'GM', elo: 2700, opis: 'Ścisła światowa czołówka (2700+).',                 czas: 4000 },
-  { id: 12, nazwa: 'Mistrz świata',         skrot: 'GM', elo: 2823, opis: 'Poziom Magnusa Carlsena – nr 1 na świecie.',        czas: 6000 }
+  { id: 12, nazwa: 'Mistrz świata',         skrot: 'GM', elo: 2823, opis: 'Poziom Magnusa Carlsena – nr 1 na świecie.',        czas: 6000 },
+  // Hell bot to nie nasz silnik, tylko Stockfish 16.1 (js/stockfish.js) – silniejszy od każdego człowieka.
+  { id: 13, nazwa: 'Hell bot',              skrot: 'SF', elo: 3000, eloTekst: '3000+', opis: 'Stockfish 16.1. Silniejszy od mistrza świata. Powodzenia.', czas: 3000, silnik: 'stockfish' }
 ];
 
 // Książka debiutów: popularne otwarcia w zapisie algebraicznym (S = skoczek po angielsku N itd.).
@@ -294,14 +296,67 @@ function stworzSilnik() {
   }
 
   // ---------- Ocena pozycji (z punktu widzenia strony na ruchu, w setnych pionka) ----------
-  function ocena() {
+  // Składniki: materiał, tabele pozycyjne, para gońców, struktura pionków (zdwojone, izolowane,
+  // wolne pionki), wieże na otwartych liniach, ruchliwość figur, osłona pionkowa króla
+  // i dobijanie króla przeciwnika w końcówkach.
+  const pionkiB = new Int8Array(8), pionkiC = new Int8Array(8);   // ile pionków na każdej kolumnie
+  const minWierszC = new Int8Array(8), maxWierszB = new Int8Array(8); // najdalej wysunięte pionki (do wolnych pionków)
+  const BONUS_WOLNEGO = [0, 110, 75, 45, 25, 12, 8, 0];   // indeks = odległość od promocji
+  const RUCHLIWOSC = [0, 0, 4, 5, 2, 1, 0];                 // punkty za każde dostępne pole
+
+  function ruchliwosc(s, typ, znak) {
+    let n = 0;
+    if (typ === 2) {
+      for (let j = 0; j < 8; j++) { const q = B[s + SKOCZEK[j]]; if (q !== RAMKA && q * znak <= 0) n++; }
+      return n;
+    }
+    const kier = typ === 3 ? SKOS : typ === 4 ? PROSTO : WSZYSTKIE;
+    for (let j = 0; j < kier.length; j++) {
+      const d = kier[j];
+      let t = s + d;
+      while (B[t] === 0) { n++; t += d; }
+      if (B[t] !== RAMKA && B[t] * znak < 0) n++;
+    }
+    return n;
+  }
+
+  // Osłona króla: pionki przed królem stojącym na swoich dwóch pierwszych liniach.
+  function oslonaKrola(znak) {
+    const s = krol[znak], i = DO64[s], w = i >> 3, k = i & 7;
+    const naSwoimSkrzydle = znak === 1 ? w >= 6 : w <= 1;
+    if (!naSwoimSkrzydle) return -20;
+    const przod = znak === 1 ? -10 : 10;
+    const kolumny = znak === 1 ? pionkiB : pionkiC;
+    let wynik = 0;
+    for (let dk = -1; dk <= 1; dk++) {
+      const kk = k + dk;
+      if (kk < 0 || kk > 7) continue;
+      const pole = s + dk + przod;
+      if (B[pole] === znak) wynik += 12;
+      else if (B[pole + przod] === znak) wynik += 6;
+      else wynik -= 10;
+      if (!kolumny[kk]) wynik -= 15;            // otwarta linia przy królu
+    }
+    return wynik;
+  }
+
+  // alfa/beta (opcjonalne): jeśli już po materiale i ustawieniu bierek wynik jest daleko poza oknem,
+  // droższe składniki (pionki, ruchliwość, osłona króla) nic nie zmienią – „leniwa ocena”.
+  const MARGINES_LENIWY = 260;
+  function ocena(alfa = -1e9, beta = 1e9) {
     let wynik = 0, krolMid = 0, krolKon = 0, faza = 0, materialB = 0, materialC = 0, goncyB = 0, goncyC = 0;
+    pionkiB.fill(0); pionkiC.fill(0); minWierszC.fill(8); maxWierszB.fill(-1);
     for (let i = 0; i < 64; i++) {
       const p = B[POLA[i]];
       if (!p) continue;
       const typ = p > 0 ? p : -p;
       const idx = p > 0 ? i : (7 - (i >> 3)) * 8 + (i & 7);
       faza += FAZA[typ];
+      if (typ === 1) {
+        const w = i >> 3, k = i & 7;
+        if (p > 0) { pionkiB[k]++; if (w > maxWierszB[k]) maxWierszB[k] = w; }
+        else { pionkiC[k]++; if (w < minWierszC[k]) minWierszC[k] = w; }
+      }
       if (typ === 6) {
         const z = p > 0 ? 1 : -1;
         krolMid += z * PST[6][idx]; krolKon += z * KROL_KONCOWKA[idx];
@@ -316,6 +371,40 @@ function stworzSilnik() {
     wynik += Math.round((krolMid * faza + krolKon * (24 - faza)) / 24);
     if (goncyB >= 2) wynik += 30;
     if (goncyC >= 2) wynik -= 30;
+    const szybka = wynik * strona;
+    if (szybka - MARGINES_LENIWY >= beta || szybka + MARGINES_LENIWY <= alfa) return szybka;
+
+    // drugi przebieg: pionki, wieże, ruchliwość
+    let wolne = 0;
+    for (let i = 0; i < 64; i++) {
+      const s = POLA[i], p = B[s];
+      if (!p) continue;
+      const typ = p > 0 ? p : -p, znak = p > 0 ? 1 : -1;
+      const w = i >> 3, k = i & 7;
+      if (typ === 1) {
+        const swoje = znak === 1 ? pionkiB : pionkiC;
+        if (!(k > 0 && swoje[k - 1]) && !(k < 7 && swoje[k + 1])) wynik -= znak * 12;    // izolowany
+        let wolny = true;
+        for (let kk = Math.max(0, k - 1); kk <= Math.min(7, k + 1); kk++) {
+          if (znak === 1 ? minWierszC[kk] < w : maxWierszB[kk] > w) { wolny = false; break; }
+        }
+        if (wolny) wolne += znak * BONUS_WOLNEGO[znak === 1 ? w : 7 - w];
+      } else if (typ !== 6) {
+        wynik += znak * RUCHLIWOSC[typ] * ruchliwosc(s, typ, znak);
+        if (typ === 4) {
+          const swoje = znak === 1 ? pionkiB[k] : pionkiC[k], obce = znak === 1 ? pionkiC[k] : pionkiB[k];
+          if (!swoje) wynik += znak * (obce ? 10 : 20);   // półotwarta / otwarta linia
+        }
+      }
+    }
+    for (let k = 0; k < 8; k++) {
+      if (pionkiB[k] > 1) wynik -= 15 * (pionkiB[k] - 1);                              // zdwojone
+      if (pionkiC[k] > 1) wynik += 15 * (pionkiC[k] - 1);
+    }
+    // wolne pionki są ważniejsze w końcówce, osłona króla – w środkowej grze
+    wynik += Math.round(wolne * (48 - faza) / 36);
+    wynik += Math.round((oslonaKrola(1) - oslonaKrola(-1)) * faza / 24);
+
     // dobijanie w końcówkach: przewaga spycha króla przeciwnika do krawędzi i zbliża własnego
     const roznica = materialB - materialC;
     if (faza <= 6 && Math.abs(roznica) >= 300) {
@@ -376,9 +465,17 @@ function stworzSilnik() {
     return lista[od];
   }
 
+  // Redukcje późnych ruchów rosną z głębokością i numerem ruchu (wzór jak w silnych silnikach).
+  const REDUKCJA = [];
+  for (let g = 0; g < 64; g++) {
+    REDUKCJA.push(new Int8Array(64));
+    for (let n = 1; n < 64; n++) REDUKCJA[g][n] = g < 3 ? 0 : Math.max(0, Math.floor(0.5 + Math.log(g) * Math.log(n) / 2.3));
+  }
+  const MARGINES = [0, 150, 320];   // odcinanie beznadziejnych cichych ruchów tuż przed liśćmi
+
   function spoczynkowe(alfa, beta, ply) {
     if ((++wezly & 2047) === 0 && Date.now() > koniecCzasu) throw PRZERWIJ;
-    const teraz = ocena();
+    const teraz = bezBic ? ocena() : ocena(alfa, beta);
     if (bezBic) return teraz;
     if (teraz >= beta) return beta;
     if (teraz > alfa) alfa = teraz;
@@ -388,6 +485,9 @@ function stworzSilnik() {
     ocenRuchy(lista, oceny, 0, ply);
     for (let i = 0; i < lista.length; i++) {
       const m = wybierz(lista, oceny, i);
+      // bicie, które nawet z zapasem nie podniesie wyniku do alfy, nie ma sensu (odcinanie delta)
+      const bita = B[dokad(m)];
+      if (!promocja(m) && teraz + (bita ? WARTOSC[bita > 0 ? bita : -bita] : 100) + 200 < alfa) continue;
       if (!wykonajRuch(m)) continue;
       const w = -spoczynkowe(-beta, -alfa, ply + 1);
       cofnijRuch();
@@ -421,7 +521,7 @@ function stworzSilnik() {
     // ruch zerowy: jeśli nawet po oddaniu ruchu jest dobrze, ta gałąź nie jest potrzebna
     if (zerowyDozwolony && !wSzachu && gl >= 3 && ply > 0 && beta < MAT - 1000 && maBierki(strona) && ocena() >= beta) {
       ruchZerowy();
-      const w = -szukaj(gl - 3, -beta, -beta + 1, ply + 1, false);
+      const w = -szukaj(gl - 1 - (gl >= 6 ? 3 : 2), -beta, -beta + 1, ply + 1, false);
       cofnijZerowy();
       if (w >= beta) return beta;
     }
@@ -432,16 +532,25 @@ function stworzSilnik() {
     ocenRuchy(lista, oceny, ttM, ply);
     let legalne = 0, najRuch = 0, najWynik = -NIESK;
     const startAlfa = alfa;
+    const moznaOdcinac = gl <= 2 && !wSzachu && ply > 0 && Math.abs(alfa) < MAT - 1000;
+    const statyczna = moznaOdcinac ? ocena() : 0;
     for (let i = 0; i < lista.length; i++) {
       const m = wybierz(lista, oceny, i);
       const cichy = !B[dokad(m)] && !promocja(m) && !(flagi(m) & 1);
       if (!wykonajRuch(m)) continue;
       legalne++;
+      const dajeSzach = atakowane(krol[strona], -strona);
+      // tuż przed liśćmi cichy ruch bez szachu nie podniesie słabej pozycji – pomijamy go
+      if (moznaOdcinac && cichy && !dajeSzach && legalne > 1 && statyczna + MARGINES[gl] <= alfa) {
+        cofnijRuch();
+        continue;
+      }
       let w;
       if (legalne === 1) w = -szukaj(gl - 1, -beta, -alfa, ply + 1, true);
       else {
         // późne ciche ruchy liczymy płycej; jeśli wyglądają dobrze – pełne przeliczenie
-        let red = (gl >= 3 && legalne > 4 && cichy && !wSzachu && oceny[i] < 800000) ? 1 : 0;
+        let red = (cichy && !wSzachu && !dajeSzach && oceny[i] < 800000) ? REDUKCJA[Math.min(gl, 63)][Math.min(legalne, 63)] : 0;
+        if (red > gl - 2) red = Math.max(0, gl - 2);
         w = -szukaj(gl - 1 - red, -alfa - 1, -alfa, ply + 1, true);
         if (w > alfa && (red || w < beta)) w = -szukaj(gl - 1, -beta, -alfa, ply + 1, true);
       }
@@ -585,14 +694,14 @@ function stworzSilnik() {
     // Pogłębianie iteracyjne w limicie czasu.
     koniecCzasu = start + poziom.czas;
     let najRuch = ruchy[0], najOcena = 0, glebokosc = 0;
-    for (let gl = 1; gl <= 64; gl++) {
+    for (let gl = 1; gl <= (opcje.maxGlebokosc || 64); gl++) {
       try {
         const w = szukaj(gl, -NIESK, NIESK, 0, false);
         const idx = h1 & (ROZMIAR_TT - 1);
         if (ttK1[idx] === h1 && ttK2[idx] === h2 && ttRuch[idx] && ruchy.includes(ttRuch[idx])) najRuch = ttRuch[idx];
         najOcena = w; glebokosc = gl;
         if (Math.abs(w) > MAT - 1000) break;                       // znaleziony mat
-        if (Date.now() - start > poziom.czas * 0.55) break;         // następna głębokość i tak się nie zmieści
+        if (!opcje.maxGlebokosc && Date.now() - start > poziom.czas * 0.55) break;         // następna głębokość i tak się nie zmieści
       } catch (e) {
         if (e !== PRZERWIJ) throw e;
         // przerwane w trakcie – zostajemy przy ostatnim pełnym wyniku

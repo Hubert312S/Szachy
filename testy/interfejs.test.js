@@ -97,7 +97,8 @@ grupa('Panel i gra z botem', () => {
     await zaladujStrone();
     const poziomy = strona().querySelectorAll('.poziom');
     oczekuj(poziomy.length).toBe(POZIOMY_BOTA.length);
-    oczekuj(poziomy[poziomy.length - 1].textContent).toContain('2823');
+    oczekuj(strona().querySelector('.poziom[data-id="12"]').textContent).toContain('2823');
+    oczekuj(poziomy[poziomy.length - 1].textContent).toContain('Hell bot');
   }, P);
 
   test('Bot odpowiada na ruch gracza', async () => {
@@ -220,5 +221,31 @@ grupa('Przegląd partii', () => {
     await nowaGraDwochGraczy();
     oczekuj(strona().querySelector('#przeglad').classList.contains('ukryte')).toBeTruthy();
     oczekuj(liczbaBierek()).toBe(32);
+  }, P);
+});
+
+grupa('Hell bot (Stockfish)', () => {
+  test('Stockfish uruchamia się i znajduje mata w 1 (mat głupca)', async () => {
+    const ruch = await HellBot.ruch(['f2f3', 'e7e5', 'g2g4'], 1000);
+    oczekuj(ruch).toBe('d8h4');
+  }, P);
+
+  test('Stockfish wykorzystuje podstawiony materiał', async () => {
+    // 1.e4 e5 2.Qh5 Nc6 3.Qxe5+?? – czarne zbijają hetmana skoczkiem
+    const ruch = await HellBot.ruch(['e2e4', 'e7e5', 'd1h5', 'b8c6', 'h5e5'], 1000);
+    oczekuj(ruch).toBe('c6e5');
+  }, P);
+
+  test('Hell bot odpowiada w grze legalnym ruchem', async () => {
+    await zaladujStrone();
+    strona().querySelector('#tryb [data-tryb="bot"]').click();
+    strona().querySelector('#kolor [data-kolor="w"]').click();
+    strona().querySelector('.poziom[data-id="13"]').click();
+    strona().querySelector('#start').click();
+    oczekuj(strona().querySelector('#przeciwnik-info').textContent).toContain('Hell bot');
+    klikRuchy('d2d4');
+    await poczekajAz(() => polruchGry === 2, 30000);
+    oczekuj(strona().querySelector('#status').textContent).toBe('Twój ruch');
+    oczekuj(historia[2].uci.length >= 4).toBeTruthy();
   }, P);
 });

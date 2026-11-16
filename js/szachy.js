@@ -24,7 +24,7 @@ const infoPrzeciwnik = document.getElementById('przeciwnik-info');
 
 function nowaGra() {
   generacja++;
-  if (botMysli) restartujSilnik();
+  if (botMysli) { restartujSilnik(); HellBot.przerwij(); }
   botMysli = false;
   polruchGry = 0;
   document.querySelector('.promocja')?.remove();
@@ -150,10 +150,16 @@ function zagraj(ruch, promujNa) {
   } else if (stan.polruchyBezBicia >= 100) {
     stan.koniec = 'ruchy50';
   }
-  historia.push({ stan, ostatniRuch, opis });
+  historia.push({ stan, ostatniRuch, opis, uci: zapisUci(ruch, promujNa) });
   rysuj();
   if (stan.koniec) pokazKoniecGry();
   else ruchBota();
+}
+
+// Ruch w zapisie UCI (np. „e2e4”, „e7e8q”) – tak rozmawiamy ze Stockfishem.
+function zapisUci(ruch, promujNa) {
+  const pole = p => LITERY[p.k] + (8 - p.w);
+  return pole(ruch.z) + pole(ruch.na) + (ruch.promocja ? (promujNa || 'q') : '');
 }
 
 // Opis ruchu do przeglądu, np. „Skoczek g1–f3”, „Pionek e5×d6”, „Król: roszada krótka”.
@@ -280,6 +286,12 @@ document.getElementById('remis').addEventListener('click', () => {
 
 document.getElementById('obroc').addEventListener('click', () => { obrocona = !obrocona; rysuj(); });
 
+// Pełny ekran (przycisk jest tylko na stronie gry).
+document.getElementById('pelny-ekran')?.addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen?.();
+});
+
 // Przyciski przeglądu partii i strzałki na klawiaturze.
 document.getElementById('przeglad-poczatek').addEventListener('click', () => przejdzDo(0));
 document.getElementById('przeglad-wstecz').addEventListener('click', () => przejdzDo(przegladIndeks - 1));
@@ -360,13 +372,27 @@ async function ruchBota() {
   botMysli = true;
   rysuj();
   const start = Date.now();
-  const wynik = await zapytajSilnik({ typ: 'ruch', pozycja: stan, poziom: gra.poziom, opcje: { numerPolruchu: polruchGry, historia: historia.slice(0, -1).map(h => h.stan) } });
+  let wynik;
+  if (gra.poziom.silnik === 'stockfish') {
+    wynik = await ruchHellBota();
+  } else {
+    wynik = await zapytajSilnik({ typ: 'ruch', pozycja: stan, poziom: gra.poziom, opcje: { numerPolruchu: polruchGry, historia: historia.slice(0, -1).map(h => h.stan) } });
+  }
   await czekaj(Math.max(0, 450 - (Date.now() - start)));   // żeby ruch nie pojawiał się „znikąd”
   if (moja !== generacja || !wynik) return;
   botMysli = false;
   const ruch = legalneRuchy(stan, wynik.z.w, wynik.z.k).find(r => r.na.w === wynik.na.w && r.na.k === wynik.na.k);
   if (!ruch) { rysuj(); return; }
   zagraj(ruch, wynik.promocja || 'q');
+}
+
+// Hell bot: Stockfish dostaje wszystkie ruchy partii od pozycji startowej.
+async function ruchHellBota() {
+  if (!HellBot.czyWczytany()) status.textContent = 'Budzę Hell bota (Stockfish)…';
+  const uci = await HellBot.ruch(historia.slice(1).map(h => h.uci), gra.poziom.czas);
+  if (!uci || uci === '(none)') return null;
+  const pole = n => ({ w: 8 - +n[1], k: LITERY.indexOf(n[0]) });
+  return { z: pole(uci.slice(0, 2)), na: pole(uci.slice(2, 4)), promocja: uci[4] || null };
 }
 
 // Bot przyjmuje remis, gdy uważa, że stoi gorzej.
@@ -395,7 +421,7 @@ async function zaproponujRemisBotowi() {
 function pokazPrzeciwnika() {
   if (gra.tryb === 'bot') {
     const p = gra.poziom;
-    infoPrzeciwnik.innerHTML = `Grasz ${gra.kolorGracza === 'w' ? 'białymi' : 'czarnymi'} przeciwko: <strong>${p.nazwa}</strong>${p.skrot ? ` <span class="tytul">${p.skrot}</span>` : ''} · Elo ${p.elo}`;
+    infoPrzeciwnik.innerHTML = `Grasz ${gra.kolorGracza === 'w' ? 'białymi' : 'czarnymi'} przeciwko: <strong>${p.nazwa}</strong>${p.skrot ? ` <span class="tytul">${p.skrot}</span>` : ''} · Elo ${p.eloTekst || p.elo}`;
   } else {
     infoPrzeciwnik.textContent = 'Dwóch graczy przy jednym komputerze';
   }
@@ -405,12 +431,12 @@ function zbudujPanel() {
   const lista = document.getElementById('poziomy');
   for (const p of POZIOMY_BOTA) {
     const el = document.createElement('button');
-    el.className = 'poziom';
+    el.className = 'poziom' + (p.silnik === 'stockfish' ? ' hell' : '');
     el.dataset.id = p.id;
     el.innerHTML = `
       <span class="poziom-gora">
         <span class="poziom-nazwa">${p.nazwa}${p.skrot ? ` <span class="tytul">${p.skrot}</span>` : ''}</span>
-        <span class="poziom-elo">${p.elo}</span>
+        <span class="poziom-elo">${p.eloTekst || p.elo}</span>
       </span>
       <span class="poziom-opis">${p.opis}</span>`;
     el.addEventListener('click', () => { ustawienia.poziomId = p.id; odswiezPanel(); });
